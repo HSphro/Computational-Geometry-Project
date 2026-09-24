@@ -311,12 +311,13 @@ static const double SEGMENT[7][4] = {{0, 2, 1, 2},
                                      {0, 1, 1, 1}};
 
 // the four corners of a rectangle, for GL_QUADS or GL_LINE_LOOP
+#define FONT_SQUARE_PADDING (0.003f)
 static void emitRect(Vec2 lo, Vec2 hi)
 {
-  vertex(lo);
-  vertex((Vec2){hi.x, lo.y});
-  vertex(hi);
-  vertex((Vec2){lo.x, hi.y});
+  vertex((Vec2){lo.x-FONT_SQUARE_PADDING, lo.y-FONT_SQUARE_PADDING});
+  vertex((Vec2){hi.x+FONT_SQUARE_PADDING, lo.y-FONT_SQUARE_PADDING});
+  vertex((Vec2){hi.x+FONT_SQUARE_PADDING, hi.y+FONT_SQUARE_PADDING});
+  vertex((Vec2){lo.x-FONT_SQUARE_PADDING, hi.y+FONT_SQUARE_PADDING});
 }
 
 // integer `value` centred on `at`, digits `height` tall, on a white plate

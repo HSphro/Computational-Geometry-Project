@@ -30,6 +30,7 @@
  * never a number of pixels, so the drawing looks the same at any zoom. */
 #define WINDOW_PX 800     // initial window size
 #define TEXT_HEIGHT 0.036 // digit height / half-height of the view
+#define TEXT_PADDING 0.25 // plate margin around the digits / digit height
 #define ARROW_INSET 0.42  // how far a side is pulled toward the element centre
 #define ARROW_TRIM 0.24   // how much of each end of that side is cut away
 #define ARROW_HEAD 0.22   // barb length / arrow length
@@ -131,8 +132,7 @@ static void sceneSet(Scene *s,
   s->nodesPerElem = nodesPerElem;
   s->sidesPerElem = (nodesPerElem == 3) ? 3 : 1;
   s->xy = copyOf(xy, 2 * (size_t)s->nNodes * sizeof(double));
-  s->elems =
-      copyOf(elems, (size_t)s->nElems * nodesPerElem * sizeof(uint32_t));
+  s->elems = copyOf(elems, (size_t)s->nElems * nodesPerElem * sizeof(uint32_t));
 
   /* bounding box, the view is framed on it */
   s->box = (Box){0.0, 1.0, 0.0, 1.0};
@@ -298,42 +298,66 @@ static void setNodeColor(const Scene *s, uint32_t v)
   glColor3fv(rgb);
 }
 
-/* 7-segment digits: bit k of DIGIT[d] lights segment SEGMENT[k], given as
- * {x0,y0, x1,y1} in a box 1 wide and 2 high. That is the whole font. */
-static const unsigned char DIGIT[10] = {
-    63, 6, 91, 79, 102, 109, 125, 7, 127, 111};
-static const double SEGMENT[7][4] = {{0, 2, 1, 2},
-                                     {1, 2, 1, 1},
-                                     {1, 1, 1, 0},
-                                     {0, 0, 1, 0},
-                                     {0, 1, 0, 0},
-                                     {0, 2, 0, 1},
-                                     {0, 1, 1, 1}};
+/* 5x7 bitmap digits: row r of digit d is DIGIT[d][r], top row first, bit 4
+ * the leftmost column. Each lit bit is drawn as a filled square cell, so the
+ * digits are as tall as asked at any zoom. That is the whole font. */
+#define GLYPH_COLS 5
+#define GLYPH_ROWS 7
+static const unsigned char DIGIT[10][GLYPH_ROWS] = {
+    {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},  // 0
+    {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E},  // 1
+    {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F},  // 2
+    {0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E},  // 3
+    {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02},  // 4
+    {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E},  // 5
+    {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E},  // 6
+    {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},  // 7
+    {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E},  // 8
+    {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C}}; // 9
 
 // the four corners of a rectangle, for GL_QUADS or GL_LINE_LOOP
-#define FONT_SQUARE_PADDING (0.003f)
 static void emitRect(Vec2 lo, Vec2 hi)
 {
-  vertex((Vec2){lo.x-FONT_SQUARE_PADDING, lo.y-FONT_SQUARE_PADDING});
-  vertex((Vec2){hi.x+FONT_SQUARE_PADDING, lo.y-FONT_SQUARE_PADDING});
-  vertex((Vec2){hi.x+FONT_SQUARE_PADDING, hi.y+FONT_SQUARE_PADDING});
-  vertex((Vec2){lo.x-FONT_SQUARE_PADDING, hi.y+FONT_SQUARE_PADDING});
+  vertex(lo);
+  vertex((Vec2){hi.x, lo.y});
+  vertex(hi);
+  vertex((Vec2){lo.x, hi.y});
 }
 
-// integer `value` centred on `at`, digits `height` tall, on a white plate
+/* The screen pixel grid, in world coordinates: a pixel is `size` wide and
+ * the grid lines are at `origin` + k * size. Set by beginFrame(), it lets the
+ * font land on whole pixels, which is what keeps small digits sharp. */
+static struct
+{
+  Vec2 origin;
+  double size;
+} pixel = {{0.0, 0.0}, 1.0};
+
+// the pixel grid line nearest to x, for a grid with a line at origin
+static double snap(double x, double origin)
+{
+  return origin + round((x - origin) / pixel.size) * pixel.size;
+}
+
+// integer `value` centred on `at`, digits about `height` tall, on a white plate
 static void drawNumber(int value, Vec2 at, double height, const float *color)
 {
   char text[16];
   int len = sprintf(text, "%d", value);
-  double d = 0.5 * height; // a digit is d wide and 2d high
-  double advance = 1.3 * d;
-  double width = len * advance - 0.3 * d;
-  double pen = at.x - 0.5 * width;
+  // one bit of the font: a whole number of pixels, at least one
+  double cell = fmax(1.0, round(height / GLYPH_ROWS / pixel.size)) * pixel.size;
+  double advance = (GLYPH_COLS + 1) * cell; // a digit and a one-cell gap
+  double width = len * advance - cell;
+  height = GLYPH_ROWS * cell;
+  double pad = snap(TEXT_PADDING * height, 0.0);
+  Vec2 top = {snap(at.x - 0.5 * width, pixel.origin.x),
+              snap(at.y + 0.5 * height, pixel.origin.y)}; // top-left of digit 0
 
   /* the plate keeps the number readable over the mesh, the outline keeps it
-   * visible over the white background */
-  Vec2 lo = {pen - 0.3 * d, at.y - 1.25 * d};
-  Vec2 hi = {pen + width + 0.3 * d, at.y + 1.25 * d};
+   * visible over the white background, the padding keeps the digits clear of
+   * the outline */
+  Vec2 lo = {top.x - pad, top.y - height - pad};
+  Vec2 hi = {top.x + width + pad, top.y + pad};
   glColor3f(1, 1, 1);
   glBegin(GL_QUADS);
   emitRect(lo, hi);
@@ -343,19 +367,17 @@ static void drawNumber(int value, Vec2 at, double height, const float *color)
   emitRect(lo, hi);
   glEnd();
 
-  glBegin(GL_LINES);
-  for (int i = 0; i < len; i++, pen += advance)
+  glBegin(GL_QUADS);
+  for (int i = 0; i < len; i++, top.x += advance)
   {
-    int digit = text[i] - '0';
-    double nudge = (text[i] == '1') ? -0.25 * d : 0.0; // centre the narrow '1'
-    for (int k = 0; k < 7; k++)
-      if (DIGIT[digit] & (1 << k))
-      {
-        vertex((Vec2){pen + nudge + SEGMENT[k][0] * d,
-                      at.y - d + SEGMENT[k][1] * d});
-        vertex((Vec2){pen + nudge + SEGMENT[k][2] * d,
-                      at.y - d + SEGMENT[k][3] * d});
-      }
+    const unsigned char *rows = DIGIT[text[i] - '0'];
+    for (int r = 0; r < GLYPH_ROWS; r++)
+      for (int c = 0; c < GLYPH_COLS; c++)
+        if (rows[r] & (1 << (GLYPH_COLS - 1 - c)))
+        {
+          Vec2 cellLo = {top.x + c * cell, top.y - (r + 1) * cell};
+          emitRect(cellLo, (Vec2){cellLo.x + cell, cellLo.y + cell});
+        }
   }
   glEnd();
 }
@@ -492,6 +514,8 @@ static void beginFrame(double halfHeight, int fbW, int fbH)
   double cx = 0.5 * (view.frame.xmin + view.frame.xmax) + view.panX;
   double cy = 0.5 * (view.frame.ymin + view.frame.ymax) + view.panY;
   double halfWidth = halfHeight * fbW / fbH;
+  pixel.origin = (Vec2){cx - halfWidth, cy - halfHeight};
+  pixel.size = 2 * halfHeight / fbH;
 
   /* on a HiDPI screen the framebuffer is bigger than the window: widen the
    * strokes in the same proportion, or they end up one physical pixel thin */

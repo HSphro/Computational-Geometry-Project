@@ -4,7 +4,7 @@ project(LMECA2170-Project LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # compile_commands.json for clangd & co
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # compile_commands.json for your autocompletion
 
 ## Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)

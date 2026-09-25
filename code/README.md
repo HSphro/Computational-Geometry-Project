@@ -27,8 +27,9 @@ Starter code for the numerical geometry project.
 >
 > The repo contains a skeleton of the project in C because Nathan
 > thinks you should do it in C. But he knows C can be scary so he's included a
-> tutorial on how to call C functions from Python. This way you can use Python 
-> for the high-level logic and still implement the performance-critical parts in C !
+> tutorial on how to call C functions from Python in [`docs/python-binding-example/`](./docs/python-bindings-examples/). 
+> This way you can use Python for the high-level logic and still implement 
+> the performance-critical parts in C !
 >
 > Our objective is that every group builds a PFEM simulator, but it'll be funnier 
 > for you if it is reasonably efficient so that you can make cool videos :)

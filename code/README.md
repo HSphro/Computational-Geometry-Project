@@ -43,6 +43,26 @@ Starter code for the numerical geometry project.
 - `src/`: implementations.
 - `docs/`: documentation.
 
+## How to add a new executable with CMake
+
+In the `CMakeLists.txt`, add the following at the end. You can look at the 
+already compiled executables to see how it works.
+
+```cmake 
+add_executable(my_nice_executable)  # Define a "mesh" executable
+target_include_directories(my_nice_executable PRIVATE include)  # Give access to the 'include/*.h' files to the mesh executable
+                                                                # If there are more include directories, add them all
+
+# Add the required libraries to the list. glfw and OpenGL are for the viewer
+target_link_libraries(my_nice_executable PRIVATE my_nice_library glfw OpenGL::GL)
+
+# Set the mesh source files
+target_sources(mesh PRIVATE
+    exec/my_nice_executable_file.c
+    # List ALL the required C files here (e.g. src/student_triangulation.c, src/HeGetters.c ...)
+)
+```
+
 ## Build
 
 Requires a C compiler, CMake 3.16 or newer, and OpenGL. If GLFW is not

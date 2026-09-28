@@ -43,6 +43,17 @@ target_sources(mesh PRIVATE
     src/project_display.c
 )
 
+add_executable(part1)  # Define a "mesh" executable
+target_include_directories(part1 PRIVATE include)  # Give access to the 'include/*.h' files to the mesh executable
+
+# Set the mesh source files
+target_sources(part1 PRIVATE
+    exec/part1.c
+    src/project_display.c
+    src/student_triangulation.c
+)
+target_link_libraries(part1 PRIVATE glfw OpenGL::GL m)
+
 # Define private compilation option (given to the compiler just for this executable)
 if(MSVC)
   target_compile_options(mesh PRIVATE /W4)

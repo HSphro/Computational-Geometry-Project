@@ -31,14 +31,14 @@ typedef struct {
 
 // ============================= Functions ============================
 
-/* Triangulate the points in space
+/* Triangulate the nodes of an existing triangulation. Tries to reuse memory if it exists.
  *
- * @param nodes [in]: the nodes to be triangulated
- * @param nnodes [in]: the number of nodes
+ * @param mesh [in/out]: on input, the mesh object to use. The triangulation will use the mesh.nodes 
+ *                       on output, the mesh.elems contains the Delaunay triangulation
  *
- * @return mesh: The mesh constructed from @nodes
+ * @return mesh: The mesh constructed from @mesh.nodes
  */
-mesh_st mesh_triangulate(double * nodes, uint32_t nnodes);
+void mesh_triangulate(mesh_st* mesh);
 
 /* Retrieve the boundary of a mesh.
  *

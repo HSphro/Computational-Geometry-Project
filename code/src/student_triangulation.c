@@ -3,13 +3,8 @@
 
 // Documentation can be found in student_triangulation.h
 
-mesh_st mesh_triangulate(double * nodes, uint32_t nnodes) {
-    // Do the thing...
-    return (mesh_st){
-        .nodes=nodes,
-        .elems=NULL,
-        .nnodes=nnodes,
-        .nelems=0};
+void mesh_triangulate(mesh_st * mesh) {
+    // Reuse existing memory if it exists, otherwise allocate and compute
 }
 
 boundary_st mesh_get_boundary(mesh_st const * mesh) {

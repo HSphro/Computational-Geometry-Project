@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // =========================== Structures ============================
 
 // Minimal boundary structure 
@@ -91,5 +95,9 @@ uint32_t mesh_adapt(
         uint32_t ** elems, 
         uint32_t * nnodes,
         uint32_t * nelems);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif // __STUDENT_TRIANGULATION_H__

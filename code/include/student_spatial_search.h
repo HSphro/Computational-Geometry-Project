@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C"
+#endif
+
 // =============================== Bounding box ===============================
 
 // Axis Aligned Bounding Box
@@ -192,5 +196,9 @@ intersection_st quadtree_find_intersecting_edge(quadtree_st const* qt, double co
 
 /* Free the memory allocated by the quadtree. */
 void quadtree_destroy(quadtree_st* qtree);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif // __STUDENT_SPATIAL_SEARCH_H__

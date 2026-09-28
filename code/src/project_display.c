@@ -216,8 +216,8 @@ static struct
   int filled, wireframe; // what we show
   int halfEdges;         // 0 off, 1 arrows, 2 arrows + numbers
   int nodeIndices;
-  int nextStep; // space was pressed
-} view = {.filled = 1, .wireframe = 1};
+  int pause; // space was pressed
+} view = {.filled = 1, .wireframe = 1, .pause=1};
 
 /* Frames the current scene. Only done for the first step and on 'r': later
  * steps keep the frame, so the picture does not jump when the mesh grows. */
@@ -233,8 +233,8 @@ static void onKey(GLFWwindow *win, int key, int scancode, int action, int mods)
 {
   (void)scancode;
   (void)mods;
-  if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
-    view.nextStep = 1; // GLFW_REPEAT too: holding space runs through steps
+  if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+    view.pause = !view.pause; 
   if (action != GLFW_PRESS)
     return;
 
@@ -578,19 +578,16 @@ static void drawScene(void)
 }
 
 /* Draws the scene again after every event (key, mouse, resize...), sleeping
- * in between. Returns 1 when space is pressed, if stopOnSpace, or 0 when the
+ * in between. Returns 1 when space is pressed, or 0 when the
  * window is closed. */
-static int handleEvents(int stopOnSpace)
+static int handleEvents(void)
 {
-  view.nextStep = 0;
-  while (!glfwWindowShouldClose(window))
-  {
+  do {
     drawScene();
     glfwWaitEvents(); // sleeps until the next event, then calls onKey & co
-    if (stopOnSpace && view.nextStep)
+    if (!view.pause)
       return 1;
-  }
-  glfwHideWindow(window); // the caller may run on before display_wait()
+  } while (!glfwWindowShouldClose(window) && view.pause);
   return 0;
 }
 
@@ -640,7 +637,7 @@ static int show(const double *xy,
   char title[64];
   snprintf(title, sizeof(title), "2D viewer - step %d", step);
   glfwSetWindowTitle(window, title);
-  return handleEvents(1);
+  return handleEvents();
 }
 
 /* ========================================================================== */
@@ -670,7 +667,8 @@ void display_wait(void)
 {
   if (window == NULL)
     return;
-  handleEvents(0);
+  view.pause = 1;
+  handleEvents();
   glfwDestroyWindow(window);
   glfwTerminate();
   window = NULL;

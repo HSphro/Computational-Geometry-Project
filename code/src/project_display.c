@@ -468,6 +468,17 @@ static void drawHalfEdges(const Scene *s, double textHeight, int withNumbers)
   }
 }
 
+static void drawNodes(const Scene *s)
+{
+  glPointSize(2);
+  for (uint32_t v = 0; v < s->nNodes; v++) {
+      glColor3fv(BLACK);
+      glBegin(GL_POINTS);
+      glVertex2d(s->xy[2*v], s->xy[2*v+1]);
+      glEnd();
+  }
+}
+
 static void drawNodeIndices(const Scene *s, double textHeight)
 {
   for (uint32_t v = 0; v < s->nNodes; v++)
@@ -546,6 +557,7 @@ static void drawScene(void)
   applyDrag(halfHeight);
   beginFrame(halfHeight, fbW, fbH);
 
+  drawNodes(&scene);
   if (scene.nodesPerElem == 2)
   {
     drawWireframe(&scene); // an edge list has nothing to fill

@@ -1,0 +1,585 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------------------------------------------------------------- packages
+\usepackage[a4paper,margin=2.4cm,top=3.6cm,bottom=3cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{needspace}
+\usepackage[colorlinks=true,linkcolor=navy,citecolor=navy,urlcolor=navy]{hyperref}
+\usepackage{booktabs}
+
+% ---------------------------------------------------------------- UCLouvain colours (matching the course slides)
+\definecolor{navy}{HTML}{00214D}
+\definecolor{ucblue}{HTML}{5DB3E6}
+\definecolor{ucgrey}{HTML}{8591A0}
+\definecolor{ucblock}{HTML}{F2F7FB}
+\definecolor{ucorange}{HTML}{E07B00}
+\definecolor{ucred}{HTML}{C1272D}
+
+% ---------------------------------------------------------------- section styling
+\titleformat{\section}
+  {\color{navy}\Large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}
+  {\color{navy}\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.4em}{0.6em}
+
+% ---------------------------------------------------------------- "Part" headers
+\newcommand{\homeworkpart}[2]{%
+  \vspace{0.6em}
+  \begin{tcolorbox}[colback=navy,colframe=navy,arc=0pt,boxrule=0pt,
+    left=10pt,right=10pt,top=7pt,bottom=7pt]
+    {\color{white}\bfseries\large Part #1 --- #2}
+  \end{tcolorbox}
+  \vspace{0.4em}
+}
+
+% ---------------------------------------------------------------- task / deliverable boxes
+\newcounter{taskcounter}
+\newtcolorbox{task}{%
+  enhanced, breakable, colback=ucblock, colframe=ucblue,
+  boxrule=0.8pt, arc=2pt, left=8pt, right=8pt, top=6pt, bottom=6pt,
+  before skip=8pt, after skip=8pt,
+  fonttitle=\bfseries\color{navy},
+  title={Task \stepcounter{taskcounter}\thetaskcounter}
+}
+\newtcolorbox{note}{%
+  enhanced, breakable, colback=white, colframe=ucgrey,
+  boxrule=0.6pt, arc=1pt, left=8pt, right=8pt, top=5pt, bottom=5pt,
+  before skip=6pt, after skip=6pt,
+  fonttitle=\bfseries\color{ucgrey}, title={Note}
+}
+
+% ---------------------------------------------------------------- code listings
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries\color{navy},
+  commentstyle=\itshape\color{ucgrey},
+  stringstyle=\color{ucorange},
+  numbers=left, numberstyle=\tiny\color{ucgrey}, numbersep=8pt,
+  breaklines=true, breakatwhitespace=false,
+  frame=single, rulecolor=\color{ucblue!60}, framesep=6pt,
+  backgroundcolor=\color{ucblock},
+  showstringspaces=false, tabsize=2,
+  xleftmargin=1em, xrightmargin=1em,
+}
+\lstset{style=code}
+
+% ---------------------------------------------------------------- header / footer (mirrors the slide deck footer)
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.6pt}
+\fancyfoot[L]{\small\color{navy}\bfseries LMECA2170 --- Computational Geometry}
+\fancyfoot[R]{\small\color{ucgrey}\thepage\ /\ \pageref{LastPage}}
+\usepackage{lastpage}
+
+% ---------------------------------------------------------------- title block
+\newcommand{\ucletterhead}{%
+  \includegraphics[height=1.0cm]{figures/uclouvain.png}\\[8pt]
+  {\color{navy}\rule{\linewidth}{1.6pt}}\\[10pt]
+  {\color{ucblue}\rule{\linewidth}{0.8pt}}\\[14pt]
+}
+
+\begin{document}
+\thispagestyle{fancy}
+
+\ucletterhead
+
+\begin{center}
+  {\color{navy}\Huge\bfseries Computational Geometry}\\[6pt]
+  {\color{navy!80}\Large Homework --- Delaunay Triangulation, Alpha Shapes \& PFEM}\\[10pt]
+  {\large LMECA2170 \quad$\cdot$\quad Academic year 2026--2027}\\[8pt]
+  {\color{ucgrey}Miguel Delecourt \(\cdot\) Vincent Legat \(\cdot\) Kerem Okyay \(\cdot\)
+  Illy Perl \(\cdot\) Alexandre Pirot \(\cdot\)
+  Jean-Fran\c{c}ois Remacle \(\cdot\) Felix Ruyfellaere \(\cdot\) Nathan Tihon}\\[2pt]
+  {\color{ucgrey}Universit\'e catholique de Louvain}
+\end{center}
+
+\vspace{0.6em}
+{\color{ucblue}\rule{\linewidth}{0.8pt}}
+\vspace{0.8em}
+
+\noindent
+This homework has three parts, each building directly on the previous one. In
+\textbf{Part~1} you implement, entirely from scratch, an incremental Delaunay
+triangulation on top of a half-edge data structure, and filter it into an
+\emph{alpha shape}. In \textbf{Part~2} you improve that alpha shape by
+inserting Steiner points with \textbf{Chew's algorithm}, reusing the exact
+same insertion routine you wrote in Part~1. In \textbf{Part~3} you assemble
+everything into a \textbf{PFEM} (Particle Finite Element Method) time-stepping
+loop for free-surface flows, in which the alpha shape of Part~1 is recomputed
+at \emph{every time step} to track the moving fluid domain.
+
+\begin{note}
+Read the whole statement once before starting to code: the three parts share
+data structures and routines, and the way you design Part~1 will determine
+how painless (or painful) Parts~2 and~3 turn out to be.
+\end{note}
+
+% ======================================================================
+\homeworkpart{1}{From a Point Cloud to an Alpha Shape}
+% ======================================================================
+
+Let $S=\{p_1,\dots,p_n\}\subset\mathbb{R}^2$ be a cloud of $n$ points. The
+goal of Part~1 is to compute the Delaunay triangulation $DT(S)$
+incrementally, using a \textbf{half-edge} mesh data structure that you
+implement yourself, and then to filter $DT(S)$ into an \textbf{alpha shape}:
+a subset of the triangles that approximates the ``shape'' formed by the
+points, rather than just their convex hull.
+
+\subsection*{1.1 --- The half-edge data structure}
+
+You are free to use any half-edge (or half-edge-like) layout, but we
+recommend the classic \emph{triangle-based} scheme, since it is the
+simplest one to keep synchronized while triangles are created and destroyed:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Triangles are stored as a flat array \lstinline{triangles[3*nt]}: the
+    three vertex indices of triangle $t$ are
+    \lstinline{triangles[3t]}, \lstinline{triangles[3t+1]}, \lstinline{triangles[3t+2]},
+    listed \textbf{counter-clockwise}.
+  \item Each triangle $t$ owns exactly 3 half-edges, indexed $3t,3t+1,3t+2$.
+    Half-edge $3t+k$ goes from vertex \lstinline{triangles[3t+k]} to vertex
+    \lstinline{triangles[3t+(k+1)%3]}.
+  \item \lstinline{next(he)} needs no storage: it is simply
+    \lstinline{3*(he/3) + (he+1)%3}.
+  \item One array \lstinline{opposite[3*nt]} stores, for every half-edge, the
+    index of its \textbf{twin} (the half-edge of the neighbouring triangle
+    that runs along the same edge in the opposite direction), or $-1$ if the
+    edge is on the boundary.
+\end{itemize}
+
+This representation is compact, cache-friendly, and --- crucially for this
+homework --- \emph{local}: inserting a point only touches the half-edges of
+the triangles being removed and created, never the whole mesh.
+
+\begin{task}\label{tsk:halfedge}
+Implement the half-edge structure above (or an equivalent one of your
+choice) together with the elementary queries you will need: the two
+triangles sharing an edge, the three neighbours of a triangle, and the
+vertices of a triangle in CCW order.
+\end{task}
+
+\subsection*{1.2 --- Bootstrapping: three points at infinity}
+
+Incremental insertion needs \emph{some} triangulation to start from. Resist
+the temptation to fake this with 3 extra vertices placed ``far enough away''
+at some large finite coordinate: how far is far enough depends on $S$, gets
+this wrong silently (a triangulation that is simply \emph{wrong}, not a
+crash), and re-introduces exactly the floating-point magnitude problems this
+course spends so much time warning you about. The correct construction uses
+3 genuine \textbf{points at infinity} $q_0,q_1,q_2$, and adapts
+\lstinline{orient2d}/\lstinline{incircle} to handle them --- exactly,
+with no tuning parameter at all.
+
+Represent each $q_k$ not by coordinates but by a \textbf{direction}
+$d_k\in\mathbb{R}^2$ (e.g.\ three unit vectors $120^\circ$ apart). The
+starting triangulation is the single triangle $(q_0,q_1,q_2)$: since the
+three directions span the whole circle, every finite point is, by
+convention, inside it --- no test is ever needed to check this.
+
+\paragraph{Extending orient2d.} Write $A,B,C$ for the (finite or infinite)
+vertices of the predicate. If a vertex is infinite with direction $d$, its
+homogeneous row is $(d_x,d_y,0)$ instead of $(x,y,1)$; expanding the usual
+$3\times3$ determinant with such a row gives the following closed forms
+(each derivable from the others by the cyclic symmetry
+$\text{orient2d}(A,B,C)=\text{orient2d}(B,C,A)$):
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Case & Formula \\
+\midrule
+$A,B,C$ all finite & the usual determinant \\
+$C=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(B{-}A,\,d)$ \\
+$B=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(d,\,C{-}A)$ \\
+$A=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(C{-}B,\,d)$ \\
+$B,C=\infty$, directions $d_B,d_C$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(d_B,d_C)$ (constant, any finite $A$)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+where $\mathrm{cross}(u,v)=u_xv_y-u_yv_x$. No division, no large
+coordinates, no loss of precision --- ever.
+
+\paragraph{Extending incircle.} The point $D$ being inserted is always
+finite; $A,B,C$ are the vertices of the candidate triangle (listed CCW).
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{0 infinite vertices}: the usual \lstinline{incircle}
+    determinant.
+  \item \textbf{1 infinite vertex}, say $C=\infty$ in direction $d$: as $C$
+    recedes to infinity the circumcircle of $A,B,C$ degenerates into the
+    \emph{half-plane} bounded by line $AB$, on the side $d$ points to. Hence
+    $$\text{incircle}(A,B,C,D) \ \text{has the same sign as}\ \text{orient2d}(A,B,D).$$
+    (Cyclically rotate if $A$ or $B$ is the infinite one instead: e.g.\ if
+    $A=\infty$, use $\text{orient2d}(B,C,D)$.)
+  \item \textbf{2 infinite vertices}, say $B=\infty$ (direction $d_B$) and
+    $C=\infty$ (direction $d_C$), with $A$ finite: the circumcircle
+    degenerates into the infinite \emph{angular wedge}, based at $A$, swept
+    counter-clockwise from $d_B$ to $d_C$. Hence
+    $$\text{incircle}(A,B,C,D) > 0 \iff \text{orient2d}(A,A{+}d_B,D)>0 \ \text{ and }\ \text{orient2d}(A,D,A{+}d_C)>0.$$
+  \item \textbf{3 infinite vertices}: only the very first (bootstrap)
+    triangle; it is never tested, since $S$'s first point is inside it by
+    construction.
+\end{itemize}
+
+\begin{note}
+Every case above reduces to one or two calls to \lstinline{orient2d} ---
+you never need to evaluate a circumcircle when an infinite vertex is
+involved. This is not a coincidence: it is exactly why using true points at
+infinity is both simpler \emph{and} more robust than a large finite
+super-triangle.
+\end{note}
+
+\subsection*{1.3 --- Insertion order: sorting along a Hilbert curve}
+
+Insert the points of $S$ one at a time --- but not in an arbitrary order.
+Sort $S$ along a \textbf{Hilbert space-filling curve} first. Consecutive
+points along the curve are guaranteed to be close together in the plane, so
+each new point almost always lands close to where the \emph{previous} one
+was inserted, which is exactly what makes the point-location walk below fast
+in practice (amortized $O(1)$ instead of $O(\sqrt n)$ per insertion).
+
+\begin{task}
+Implement a Hilbert-curve sort of the input points (map each point to a
+Hilbert index at a fixed recursion depth, then sort by that index).
+\end{task}
+
+\subsection*{1.4 --- Locating the point: a stochastic visibility walk}
+
+For every point $p$ (in Hilbert order), first find the triangle $T_0$ that
+contains it, starting the walk from the triangle in which the
+\emph{previous} point was inserted:
+
+\needspace{12\baselineskip}
+\begin{lstlisting}[style=code,caption={Stochastic visibility walk},captionpos=b]
+T <- last triangle used
+loop:
+  let (u,v,w) be the vertices of T, CCW
+  test the 3 edges (u,v),(v,w),(w,u) of T in a *random* order
+  for the first edge (a,b) such that orient2d(a,b,p) < 0:
+      cross into the triangle across (a,b);  T <- that triangle
+      continue the loop
+  # no edge tested negative: p is inside T
+  T0 <- T;  stop
+\end{lstlisting}
+
+The predicate \lstinline{orient2d(a,b,p)} returns (twice) the signed area of
+$abp$: negative means $p$ lies to the right of the oriented edge
+$a\!\to\!b$, i.e.\ outside the triangle on that side.
+
+\begin{note}
+Randomizing the order in which the 3 edges are tested at every step is not
+cosmetic: on a triangulation that is not Delaunay (which can happen
+transiently, or if you experiment with non-Delaunay meshes), a
+\emph{deterministic} edge order can make the walk cycle forever. The
+randomized version almost surely terminates. On a genuine Delaunay
+triangulation the walk always terminates, deterministic or not --- but get
+into the habit of randomizing, it costs nothing and removes an entire class
+of bugs.
+\end{note}
+
+\subsection*{1.5 --- Building the Delaunay cavity}
+
+Starting from $T_0$, grow the \textbf{cavity} of $p$ breadth-first: a
+triangle belongs to the cavity if and only if $p$ lies strictly inside its
+circumcircle (the \lstinline{incircle} predicate).
+
+\needspace{12\baselineskip}
+\begin{lstlisting}[style=code,caption={Cavity computation (BFS)},captionpos=b]
+cavity <- {T0};  Q <- [T0]
+while Q is not empty:
+   T <- Q.pop_front()
+   for each neighbour T' of T, across shared edge e:
+       if T' not in cavity and incircle(T', p) > 0:
+           cavity <- cavity + {T'}
+           Q.push(T')
+       else:
+           boundary <- boundary + {e}
+\end{lstlisting}
+
+At the end, \lstinline{boundary} is the ordered set of edges bounding the
+star-shaped hole left by removing every triangle of \lstinline{cavity}.
+
+\subsection*{1.6 --- Retriangulating the cavity}
+
+Delete every triangle of \lstinline{cavity} and create one new triangle
+$(a,b,p)$ for every boundary edge $(a,b)$, connecting $p$ to the whole
+boundary loop (a \emph{fan}). This is the step where the half-edge structure
+must be updated \textbf{locally}:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item for each new triangle $(a,b,p)$, set the twin of its edge $(a,b)$ to
+    whatever triangle used to be on the other side of that boundary edge
+    (unchanged, since that neighbour was \emph{not} in the cavity);
+  \item set the twins of the two new internal edges ($b\!\to\!p$ and
+    $p\!\to\!a$) to their counterparts in the two adjacent new fan triangles.
+\end{itemize}
+
+No other half-edge in the mesh needs to be touched.
+
+\begin{task}\label{tsk:bowyerwatson}
+Implement the full incremental Bowyer--Watson loop: super-triangle,
+Hilbert-sorted insertion, visibility walk, cavity, retriangulation. When
+every point of $S$ has been inserted, discard every triangle that still
+touches one of $q_0,q_1,q_2$: what remains is exactly $DT(S)$.
+\end{task}
+
+\subsection*{1.7 --- Filtering into an alpha shape}
+
+An \textbf{alpha shape} of parameter $\alpha>0$ is obtained by removing,
+from $DT(S)$, every triangle whose circumradius exceeds $\alpha$. Loosely,
+$\alpha$ acts as a probe radius: triangles that could only exist because
+Delaunay triangulates the \emph{convex hull} of $S$ --- bridging concavities
+or holes with large, thin triangles --- have a large circumradius and
+disappear, while the triangles that genuinely reflect the local density of
+$S$ survive.
+
+\begin{task}
+Compute the circumradius of every triangle of $DT(S)$ and remove those
+exceeding a user-supplied $\alpha$. Test on a point cloud shaped like a
+non-convex outline (e.g.\ a letter, an annulus, or two point clusters joined
+by a thin bridge) and check that the result visually matches the cloud's
+shape for a reasonable range of $\alpha$, and degenerates back towards the
+convex hull as $\alpha\to\infty$.
+\end{task}
+
+\paragraph{A single global $\alpha$ is not always enough.} If $S$ has a
+strongly non-uniform density --- a dense cluster next to a sparse one --- no
+single constant $\alpha$ works everywhere: small enough to avoid bridging
+the sparse region, it eats away real detail in the dense one; large enough
+to preserve the dense region, it bridges the sparse one anyway. The fix is
+to let $\alpha$ become a \textbf{size map} $\alpha(x,y)$, a scalar field over
+the plane, and to filter each triangle against $\alpha$ evaluated at its own
+circumcenter (or centroid) rather than against one fixed number.
+
+\begin{task}
+Generalize your filter to accept $\alpha$ as a function $\alpha(x,y)$
+instead of a constant (a simple analytic function, e.g.\ depending on
+distance to a reference point, is enough --- you do not need a full mesh
+size-field data structure for this homework). Test on a point cloud whose
+density genuinely varies across the domain, and show that a well-chosen
+$\alpha(x,y)$ recovers the shape correctly where a single constant $\alpha$
+cannot.
+\end{task}
+
+\begin{note}
+Export your triangulation to Gmsh's \texttt{.pos} format (or any format you
+can visualize) at every stage --- after Bowyer--Watson and after alpha
+filtering --- so you can \emph{see} bugs instead of guessing at them.
+\end{note}
+
+% ======================================================================
+\homeworkpart{2}{Improving the Alpha Shape --- Chew's Algorithm}
+% ======================================================================
+
+Simply deleting large-circumradius triangles can leave behind a shape with a
+jagged, uneven boundary: a triangle can be thin and skinny yet still have a
+circumradius just under $\alpha$, so it survives the filter even though it
+poorly represents the local shape. \textbf{L.~Paul Chew's algorithm}
+(1989/1993) improves this by \emph{adding} well-chosen points to the
+triangulation rather than only removing triangles --- and it reuses, almost
+without modification, the point-insertion routine you already wrote in
+Part~1.
+
+\subsection*{2.1 --- The idea}
+
+Call a triangle $T$ \textbf{bad} if its circumradius-to-shortest-edge ratio
+exceeds a quality bound $\rho$ (a typical choice is $\rho\approx 1$, which
+excludes triangles with an angle smaller than about $20^\circ$). Chew's
+algorithm repeatedly picks a bad triangle and inserts a new point,
+a \textbf{Steiner point}, at its \textbf{circumcenter}:
+
+\needspace{11\baselineskip}
+\begin{lstlisting}[style=code,caption={Chew's refinement algorithm},captionpos=b]
+repeat:
+    find a triangle T that is "bad"
+        (circumradius / shortest edge > rho,  OR  circumradius > alpha)
+    if none exists: stop
+    c <- circumcenter(T)
+    insert c into the triangulation
+        (exactly the routine of Task 2: walk, cavity, retriangulate)
+\end{lstlisting}
+
+Why the circumcenter? By definition it is equidistant from all three
+vertices of $T$ and lies at the centre of $T$'s (large, empty) circumcircle
+--- inserting it there is the single point that most effectively breaks $T$
+and its immediate neighbours into smaller, better-shaped triangles, since
+after insertion no triangle incident to $c$ can have a circumcircle larger
+than the one that existed before (the new circumcircles are all contained
+in the old one).
+
+\subsection*{2.2 --- Termination}
+
+For a large enough quality bound ($\rho\gtrsim 1$, roughly a $20^\circ$
+minimum-angle guarantee) Chew's algorithm is known to terminate, inserting a
+number of Steiner points bounded in terms of the geometry of $S$. For this
+homework you do not need to reprove that bound --- but you should still
+protect your implementation with a maximum number of iterations, and you
+should expect (and check) that the number of bad triangles decreases
+monotonically as refinement proceeds.
+
+\begin{note}
+A circumcenter can fall \emph{outside} the current alpha shape (e.g.\ across
+a concavity). A simple, adequate policy for this homework: only insert
+circumcenters that fall inside the current alpha shape; a bad triangle whose
+circumcenter would fall outside is instead handled by splitting its longest
+boundary edge at its midpoint. You are free to justify and implement a
+different policy, as long as you state it clearly.
+\end{note}
+
+\begin{task}\label{tsk:chew}
+Implement Chew's refinement loop on top of your Part~1 code. After
+refinement has converged, \textbf{re-apply the alpha-shape filter} of
+Section~1.7: the new, smaller triangles created around every inserted
+point may now individually satisfy the $\alpha$ bound even where the
+original coarse triangles did not, giving a tighter, better-quality
+approximation of the point cloud's shape.
+\end{task}
+
+\begin{task}
+Compare, on the same test point cloud(s) as Part~1, the alpha shape before
+and after Chew refinement: report the number of triangles, the minimum
+angle, and the number of triangles that fail the quality bound $\rho$, in
+each case.
+\end{task}
+
+% ======================================================================
+\homeworkpart{3}{PFEM: A Particle Finite Element Method for Free-Surface Flows}
+% ======================================================================
+
+The \textbf{Particle Finite Element Method} (PFEM) simulates a fluid as a
+cloud of Lagrangian particles (the mesh vertices) that \emph{move} with the
+flow. At every time step, the fluid domain itself changes shape --- this is
+exactly a free surface --- and it must be re-detected from the current
+particle positions before the next physics step can be computed. This is
+precisely the job of the alpha shape you built in Part~1.
+
+\subsection*{3.1 --- The provided solver}
+
+The Navier--Stokes finite element time step itself is not something you
+need to write: it will be provided by \textbf{MigFlow}, wrapped in a small
+API for this homework. From your side, this API amounts to a single
+function that performs one time step on a given triangulation. Its
+interface will look essentially like this:
+
+\needspace{20\baselineskip}
+\begin{lstlisting}[style=code,caption={Interface of the provided solver (prototype)},captionpos=b]
+// nv, nt              : number of vertices / triangles
+// coord[2*nv]          : nodal coordinates (x0,y0,x1,y1,...)
+// triangles[3*nt]      : vertex indices of each triangle (flat, CCW)
+// nWall, wallEdges[2*nWall]   : edges (vertex pairs) lying on rigid walls
+// nFree, freeEdges[2*nFree]   : edges (vertex pairs) lying on the free surface
+// vx[nv], vy[nv], p[nv]       : nodal velocities & pressure, time t (in),
+//                               updated in place to time t+dt (out)
+// dt                   : time step
+void pfemStep(int nv, int nt,
+              const double *coord, const int *triangles,
+              int nWall, const int *wallEdges,
+              int nFree,  const int *freeEdges,
+              double *vx, double *vy, double *p,
+              double dt);
+\end{lstlisting}
+
+You do not need to know --- or reimplement --- anything about the fluid
+solver itself. Your job is the loop \emph{around} it.
+
+\subsection*{3.2 --- The PFEM time-stepping loop}
+
+\needspace{20\baselineskip}
+\begin{lstlisting}[style=code,caption={PFEM driver},captionpos=b]
+build the initial mesh of the fluid domain      (Part 1 + Part 2)
+classify its boundary edges into wallEdges (fixed, given a priori)
+                            and freeEdges (the rest of the alpha-shape boundary)
+vx, vy, p <- initial conditions
+
+for each time step:
+    pfemStep(nv, nt, coord, triangles,
+             nWall, wallEdges, nFree, freeEdges,
+             vx, vy, p, dt)                      # provided solver
+
+    for each vertex i:                           # move the particles
+        coord[i] <- coord[i] + dt * (vx[i], vy[i])
+
+    re-triangulate coord from scratch             # Part 1
+    recompute the alpha shape                     # Part 1 + Part 2
+    re-classify boundary edges into wallEdges / freeEdges
+
+    save/plot the current state
+\end{lstlisting}
+
+\subsection*{3.3 --- Practical points}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Walls do not move.} Points that lie on a rigid wall should
+    keep their prescribed position (or slide tangentially along the wall,
+    if you choose to support that) --- they must never be treated as free
+    and never be deleted or displaced off the wall by remeshing.
+  \item \textbf{Choosing $\alpha$.} A natural choice is a small multiple of
+    the local mesh spacing; too small an $\alpha$ will erroneously cut off
+    thin, physically valid necks of fluid (e.g.\ during a splash), too large
+    an $\alpha$ will fail to detect a fluid separation (e.g.\ a droplet
+    pinching off).
+  \item \textbf{Mesh quality.} As particles move, cluster, and spread out,
+    triangles degenerate. Re-running Chew's algorithm (Part~2) after every
+    remeshing step keeps triangle quality under control; you may also
+    choose to remove points that have become too close to a neighbour.
+  \item \textbf{Time step.} You are not required to derive a rigorous CFL
+    condition, but you should pick $dt$ small enough that particles move by
+    a small fraction of the local mesh size in a single step, and say so in
+    your report.
+\end{itemize}
+
+\begin{task}
+Implement the PFEM driver loop above around the provided \lstinline{pfemStep}
+function, reusing your Part~1/Part~2 code for the remeshing step.
+\end{task}
+
+\begin{task}
+Demonstrate your implementation on a classic \textbf{dam-break} test case
+(a rectangular column of fluid, initially at rest, collapsing under gravity
+in a rigid tank): provide a short sequence of snapshots (or a short video)
+showing the evolving mesh and free surface.
+\end{task}
+
+% ======================================================================
+\section*{Practical Information}
+% ======================================================================
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Language.} Your code must be written in \textbf{C or C++}
+    (required, in particular, to link directly against the provided
+    \lstinline{pfemStep} binary/object file for Part~3).
+  \item \textbf{Predicates and sorting.} Using an existing, well-tested
+    implementation of \lstinline{orient2d}/\lstinline{incircle} (e.g.\
+    Shewchuk's robust predicates) is clearly \textbf{allowed} --- Part~1 is
+    about the triangulation algorithm and its data structure, not about
+    re-deriving exact arithmetic. Likewise for the Hilbert sort: you may use
+    an existing implementation, e.g.\
+    \url{https://git.immc.ucl.ac.be/hextreme/HXTSort}.
+  \item \textbf{Deliverables.} Your source code (buildable from a clean
+    checkout, with a short \texttt{README}), together with a short report
+    (max.\ 6 pages) describing your data structures, any design choices left
+    open in the statement, and the results asked for in Parts~1--3.
+  \item \textbf{Visualization.} Choice of weapons: there are plenty of
+    reasonable options, and you are free to pick whichever suits you. Both
+    \textbf{ParaView} and \textbf{Gmsh} are well suited to this kind of
+    work --- e.g.\ export your triangulations in Gmsh's \texttt{.pos} format
+    so that you can inspect your own results at every stage of development.
+  \item \textbf{Deadline.} \emph{[to be announced on Moodle]}.
+  \item \textbf{Academic integrity.} This is individual work. You may
+    discuss ideas with classmates, but the code and the report you submit
+    must be your own.
+\end{itemize}
+
+\end{document}

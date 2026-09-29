@@ -216,7 +216,8 @@ static struct
   int filled, wireframe; // what we show
   int halfEdges;         // 0 off, 1 arrows, 2 arrows + numbers
   int nodeIndices;
-  int pause; // space was pressed
+  int pause;             // space was pressed
+  int nextStep;          // s: go to the next step (regardless of pause)
 } view = {.filled = 1, .wireframe = 1, .pause=1};
 
 /* Frames the current scene. Only done for the first step and on 'r': later
@@ -235,6 +236,9 @@ static void onKey(GLFWwindow *win, int key, int scancode, int action, int mods)
   (void)mods;
   if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
     view.pause = !view.pause; 
+  if (key == GLFW_KEY_S && action != GLFW_RELEASE)
+    view.nextStep = 1; 
+
   if (action != GLFW_PRESS)
     return;
 
@@ -585,8 +589,10 @@ static int handleEvents(void)
   do {
     drawScene();
     glfwWaitEvents(); // sleeps until the next event, then calls onKey & co
-    if (!view.pause)
+    if (!view.pause || view.nextStep) {
+      view.nextStep = 0;
       return 1;
+    }
   } while (!glfwWindowShouldClose(window) && view.pause);
   return 0;
 }

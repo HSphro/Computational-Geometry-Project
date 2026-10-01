@@ -16,34 +16,33 @@ boundary_st mesh_get_boundary(mesh_st const * mesh) {
         .nedges=0};
 }
 
-uint32_t mesh_delete_elements(
-        uint32_t * elems, 
-        uint8_t const * to_delete,
-        uint32_t nelems) {
+uint32_t mesh_delete_elements(mesh_st* mesh, uint8_t const * to_delete){
     // Do the thing...
-    return nelems;
+    return mesh->nelems;
 }
 
-uint32_t mesh_adapt(
-        double ** nodes, 
-        double ** node_size,
-        uint32_t ** elems, 
-        uint32_t * nnodes,
-        uint32_t * nelems) {
+uint32_t mesh_adapt(mesh_st* mesh, double** fields, uint32_t const nfields){
 
     // Helper to access the real data.
-    double * pnodes = *nodes;
-    double * pnode_size = *node_size;
-    uint32_t* pelems = *elems;
+    double * nodes = mesh->nodes;
+    double * size_field = mesh->size_field;
+    uint32_t* elems = mesh->elems;
+    double * pfields = (fields != NULL && nfields > 0) ? *fields : NULL;
+    uint32_t nnodes = mesh->nnodes;
+    uint32_t nelems = mesh->nelems;
 
     // Do the thing...
 
     // Do not forget to write the pointer to the double pointer afterward
     // so that the caller can see you've reallocated data
-    *nodes = pnodes;
-    *node_size = pnode_size;
-    *elems = pelems;
-    *nnodes = 0;
-    *nelems = 0;
+    mesh->nodes = nodes;
+    mesh->size_field = size_field;
+    mesh->elems = elems;
+    mesh->nnodes = nnodes;
+    mesh->nelems = nelems;
+
+    if (fields != NULL && nfields > 0) {
+        *fields = pfields;
+    }
     return 0;
 }

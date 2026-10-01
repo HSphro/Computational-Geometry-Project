@@ -22,11 +22,12 @@ typedef struct {
 
 // Minimal mesh structure
 typedef struct {
-    // You can modify/add anything you need. e.g. half-edges, boundary, node type, size-field...
-    double * nodes;    // Coordinates of the mesh nodes in row-major
-    uint32_t * elems;  // Triangles of the mesh
-    uint32_t nnodes;   // number of nodes
-    uint32_t nelems;   // number of elems
+    // You can modify/add anything you need. e.g. half-edges, boundary, node type, ...
+    double * nodes;      // Coordinates of the mesh nodes in row-major
+    double * size_field; // Target size of the mesh at each node. Size=nnodes
+    uint32_t * elems;    // Triangles of the mesh
+    uint32_t nnodes;     // number of nodes
+    uint32_t nelems;     // number of elems
 } mesh_st;
 
 // ============================= Functions ============================
@@ -50,51 +51,51 @@ boundary_st mesh_get_boundary(mesh_st const * mesh);
 
 /* Delete selected elements in the mesh.
  *
- * call example: mesh.nelems = mesh_delete_elements(mesh.elems, to_delete, mesh.nelems);
+ * We encourage you to store the half-edges inside the mesh and to modify them 
+ * at the same time as deleting elements. This will make mesh adaptation 
+ * a lot easier.
  *
- * @param elems [in/out]: The elements in the mesh (modified by the function)
+ * @param mesh [in/out]: On input, the mesh from which to delete elements.
+ *                       On output, the mesh without the deleted elements. (updated elems/nelems)
  * @param to_delete [in]: The elements to delete in the mesh. 
  *                        If to_delete[i] = 0, the i-th element is kept.
  *                        if to_delete[i] = 1, the i-th element is deleted.
  *                        Size = nelems
- * @param nelems [in]: the number of elements in the mesh
  *
  * @return nelems_out: the remaining element in the mesh (i.e. the number of zeros in @to_delete)
  */
-uint32_t mesh_delete_elements(
-        uint32_t * elems, 
-        uint8_t const * to_delete,
-        uint32_t nelems);
+uint32_t mesh_delete_elements(mesh_st* mesh, uint8_t const * to_delete);
 
-/* Adapt a mesh according to a given size-field (e.g. Chew's algorithm)
+/* Adapt a mesh according to mesh.size_field (e.g. Chew's algorithm)
  *
- * NOTE: these are pointer of pointers because you will need to resize (and thus reallocate)
+ * NOTE: fields is a double pointer (**) because you will need to resize (and thus reallocate)
  *       them. Take a look at "realloc(...)" : https://koor.fr/C/cstdlib/realloc.wp
- *       E.g: *nodes = realloc(*nodes, 2*new_size*sizeof(double));
+ *       E.g: *fields = realloc(*fields, nfields*new_size*sizeof(double));
  *
- *       If we gave only a pointer to the function, any reallocation would only 
+ *       If we gave a single pointer (*), any reallocation would only 
  *       be seen from inside the function and not from the caller. Meaning that 
- *       the caller would get a freed @nodes afterward without explanation
+ *       the caller would get a freed @field afterward without explanation.
  *
- * @param nodes [in/out]: On input, the nodes of the initial mesh
- *                        On output, the nodes of the adapted mesh (the added nodes are at the end of the array)
- * @param node_size [in/out]: On input, the prescribed size of the mesh at each node
- *                            On output, same but the added nodes get an interpolated value
- * @param elems [in/out]: On input, the elements of the initial mesh 
- *                        On output, the elements of the adapted mesh
- * @param nnodes [in/out]: On input, the number of nodes in the initial mesh
- *                         On output, the number of nodes in the adapted mesh
- * @param nelems [in/out]: On input, the number of elements in the initial mesh
- *                         On output, the number of elements in the initial mesh
+ *       If you think about it, the same is true for nodes, elems, and size_field
+ *       because they are pointers inside a struct pointer. Hence resizing 
+ *
+ *
+ * @param mesh [in/out]: On input, the initial mesh with its target size field. 
+ *                                 mesh.nodes contains the initial nodes 
+ *                                 mesh.elements contains the initial elements 
+ *                                 mesh.size_field contains the target size field at each node
+ *                       On output, the adapted mesh
+ *                                 mesh.nodes contains the initial nodes extended by the final nodes
+ *                                 mesh.elements contains the elements of the adapted mesh
+ *                                 mesh.size_field contains the linearly interpolated size field at each nodes
+ * @param fields [in/out]: On input, the scalar fields at each node of the initial mesh
+ *                         On output, the interpolated scalar field at each node of the final mesh
+ *                         initial size = nfields*nnodes, final size = nfields* (nnodes + nadd)
+ * @param nfields [in]: The number of fields to interpolate.
  *
  * @return nadd: The number of added nodes in the mesh
  */
-uint32_t mesh_adapt(
-        double ** nodes, 
-        double ** node_size,
-        uint32_t ** elems, 
-        uint32_t * nnodes,
-        uint32_t * nelems);
+uint32_t mesh_adapt(mesh_st* mesh, double** fields, uint32_t const nfields);
 
 #ifdef __cplusplus
 };

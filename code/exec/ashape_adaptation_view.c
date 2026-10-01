@@ -1,7 +1,9 @@
+#include <GLFW/glfw3.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include "student_triangulation.h"
 #include "project_display.h"
 
@@ -73,6 +75,18 @@ static void advect_node_rk4(double * const nodes, uint32_t nnodes, double dt, do
     }
 }
 
+void print_usage(void) {
+    printf(
+            "USAGE: ./exec/ashape_adaptation_view [--help] -n <number of nodes> -T <final time> -dt <time step> -f <max fps> -i -d\n"
+            "\t -n  INT    The number of nodes to generate \n"
+            "\t -T  FLOAT  The total time (higher = more winding)\n"
+            "\t -dt FLOAT  The time steps\n"
+            "\t -f  FLOAT  The maximum frames per second\n"
+            "\t -i  /      Display the initial mesh at every time step\n"
+            "\t -d  /      Display the mesh prior to adaptation at every time step\n"
+    );
+}
+
 
 int main(int argc, char** argv) {
 
@@ -80,30 +94,133 @@ int main(int argc, char** argv) {
     double T = 5.0;  // The time for a cycle
     double dt = 0.05;  // A single time step
     double fps = 60.0; // Frame per second
+
+    int show_initial_mesh = 0;
+    int show_deleted_elems = 0;
+    
+    if (argc <= 1) {
+        print_usage();
+        return EXIT_FAILURE;
+    }
+
+    int cur_arg = 1;
+    while (cur_arg < argc) {
+
+        // There is a value to read 
+        if (cur_arg + 1 < argc) {
+            if (strcmp("-n", argv[cur_arg]) == 0) {
+                n = atoi(argv[cur_arg+1]);
+                cur_arg += 2;
+                continue;
+            }
+            if (strcmp("-T", argv[cur_arg]) == 0) {
+                T = strtod(argv[cur_arg+1], NULL);
+                cur_arg += 2;
+                continue;
+            }
+            if (strcmp("-dt", argv[cur_arg]) == 0) {
+                dt = strtod(argv[cur_arg+1], NULL);
+                cur_arg += 2;
+                continue;
+            }
+            if (strcmp("-f", argv[cur_arg]) == 0) {
+                fps = strtod(argv[cur_arg+1], NULL);
+                cur_arg += 2;
+                continue;
+            }
+        }
+
+        if (strcmp("-i", argv[cur_arg]) == 0) {
+            cur_arg += 1;
+            show_initial_mesh = 1;
+            continue;
+        }
+
+        if (strcmp("-d", argv[cur_arg]) == 0) {
+            cur_arg += 1;
+            show_deleted_elems = 1;
+            continue;
+        }
+
+        // There is no value to read
+        print_usage();
+        return EXIT_FAILURE;
+    }
+
+    printf(
+        "Commands (AZERTY Layout):\n"
+        "\tMouse Drag:   move\n"
+        "\tMouse Scroll: zoom\n"
+        "\tr:            reset position\n"
+        "\tz:            Show/Hide mesh\n"
+        "\tf:            Show/Hide field\n"
+        "\th:            Show/hide half-edge and half-edge indices\n"
+        "\tn:            Show/hide node indices\n"
+        "\ts:            Advance a single step\n"
+        "\tspace:        Play/pause\n"
+    );
     
     srand(42); // seed the random number generator to always get the same nodes
 
     // Generation of the nodes: 
-    //      disk of radius r centered at (0.5, 0.75)
+    //      Fibonacci disk of radius r centered at (0.5, 0.75)
     double * nodes = malloc(2*n*sizeof(*nodes));
+    double const phi = (1.0 + sqrt(5.0))/2.0;
     for (uint32_t i = 0; i < n; ++i) {
-        double const r = 0.15 * (float) rand() / RAND_MAX;
-        double const theta = 2.0*M_PI * (float) rand() / RAND_MAX;
+        double const theta = i * 2.0 * M_PI * (1.0 - 1.0/phi);
+        double const r = 0.15 * sqrt((i + 0.5)/n);
+
         nodes[2*i] = 0.5 + r * cos(theta);
         nodes[2*i+1] = 0.75 + r * sin(theta);
     }
 
     mesh_st mesh = {.nodes = nodes, 
                     .elems = NULL, 
+                    .size_field = NULL,
                     .nnodes = n, 
                     .nelems = 0};
 
+    uint8_t* to_delete = NULL;
+
     struct timespec t0, t1;
-    for (double t = 0.0; t < T; t += dt) {
+    int display_continue = 1;
+    for (double t = 0.0; t < T && display_continue; t += dt) {
         timespec_get(&t0, TIME_UTC);
 
+        // ======================= Compute the initial mesh ===================
         mesh_triangulate(&mesh);
-        display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+
+        if (show_initial_mesh) {
+            display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            if (!display_continue) {
+                break;
+            }
+        }
+
+        // ====================== Compute the alpha-shape =====================
+        // Choose which elements are deleted (keep all by default)
+        uint8_t* to_delete_realloc = realloc(to_delete, sizeof(*to_delete)*mesh.nelems);
+        to_delete = to_delete_realloc;
+        memset(to_delete, 0, sizeof(*to_delete)*mesh.nelems);
+
+        mesh_delete_elements(&mesh, to_delete);
+
+        if (show_deleted_elems) {
+            display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            if (!display_continue) {
+                break;
+            }
+        }
+
+        // ====================== Adapt the mesh ==============================
+        mesh_adapt(&mesh, NULL, 0);
+
+        // By default only show the final adapted mesh
+        display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+        if (!display_continue) {
+            break;
+        }
+
         advect_node_rk4(nodes, n, dt, t, T);
 
         timespec_get(&t1, TIME_UTC);

@@ -2,8 +2,8 @@
 # ADD HERE THE NAME OF THE FILE (without the .c, 1 per line)
 # This will create an ./exec/name executable for each "name" in the list
 set(EXEC_LIST
-    example_viewer
-    ashape_adaptation_view
+    0_example_viewer
+    2_ashape_adaptation
 )
 
 foreach(EXEC ${EXEC_LIST})

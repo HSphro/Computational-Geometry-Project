@@ -232,6 +232,7 @@ int main(int argc, char** argv) {
     }
     display_wait();
 
+    free(to_delete);
     free(nodes);
     return EXIT_SUCCESS;
 }

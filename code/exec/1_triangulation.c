@@ -269,7 +269,8 @@ int main(int argc, char** argv) {
 
     printf("Time taken to compute the mesh: %.5f s\n", t);
 
-    display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+    scene_add_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+    display();
     display_wait();
 
     free(nodes);

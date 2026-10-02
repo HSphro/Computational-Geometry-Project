@@ -204,10 +204,14 @@ static void showMesh(const Mesh *mesh)
   int nNodes, nTriangles;
   const double *xy = getNodes(mesh, &nNodes);
   const int *conn = getTriangles(mesh, &nTriangles);
-  uint32_t *tri = toU32(conn, 3 * nTriangles);
+  // ponytail: the viewer keeps the pointer, so tri lives until the next call
+  // (the last one until exit, for display_wait())
+  static uint32_t *tri = NULL;
+  free(tri);
+  tri = toU32(conn, 3 * nTriangles);
 
-  display_mesh(xy, (uint32_t)nNodes, tri, (uint32_t)nTriangles, NULL, 0, 0);
-  free(tri); // the viewer keeps its own copy
+  scene_add_mesh(xy, (uint32_t)nNodes, tri, (uint32_t)nTriangles, NULL, 0, 0);
+  display();
 }
 
 /* A unit square split in 4, then refined twice, so that there is something to
@@ -267,8 +271,9 @@ static void demoDisplayMesh(void)
          "drag/scroll to move, w f h n r to toggle, q to quit\n",
          nNodes,
          nTriangles);
-  display_mesh(
+  scene_add_mesh(
       xy, (uint32_t)nNodes, tri, (uint32_t)nTriangles, fields, nfields, 1);
+  display();
   display_wait();
 
   free(fields);
@@ -297,7 +302,8 @@ static void demoDisplayEdges(void)
     }
 
   printf("boundary: %u edges out of %d half-edges\n", nEdges, nHe);
-  display_edges(xy, (uint32_t)nNodes, edges, nEdges);
+  scene_add_edges(xy, (uint32_t)nNodes, edges, nEdges);
+  display();
   display_wait();
 
   free(edges);
@@ -308,7 +314,7 @@ static void demoDisplayEdges(void)
 /*  Case 5 : step by step, the viewer inside the algorithm                    */
 /* ========================================================================== */
 
-/* Once the window is closed, display_mesh() returns at once: the rest of the
+/* Once the window is closed, display() returns at once: the rest of the
  * refinement simply runs without being shown. */
 static void demoStepByStep(void)
 {

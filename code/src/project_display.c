@@ -2,10 +2,11 @@
  * Minimal OpenGL viewer behind the project_display.h API: GL 1.1 immediate
  * mode + GLFW
  *
- * There is one window. display_mesh() and display_edges() copy their arrays
- * into `scene` and handle the window's events until the user presses space
- * (return 1) or closes the window (return 0). display_wait() handles them
- * until the window is closed, then destroys it.
+ * There is one window. scene_add_*() append objects to `scene` (pointers, not
+ * copies). display() draws them and handles the window's events until the user
+ * presses space (return 1) or closes the window (return 0); the next
+ * scene_add_*() then starts a new scene. display_wait() handles them until the
+ * window is closed, then destroys it.
  *
  *   drag    pan
  *   scroll  zoom
@@ -24,7 +25,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 /* Every length below is a fraction of something else (the view, an element),
  * never a number of pixels, so the drawing looks the same at any zoom. */
@@ -70,124 +70,133 @@ typedef struct
   double xmin, xmax, ymin, ymax;
 } Box;
 
+/* One object of the scene. The arrays are the caller's, not copies: they must
+ * stay valid as long as the object is drawn. */
 typedef struct
 {
-  double *xy; // 2*nNodes coordinates
+  const double *xy; // 2*nNodes coordinates
   uint32_t nNodes;
-  uint32_t *elems; // nElems * nodesPerElem node indices
+  const uint32_t *elems; // nElems * nodesPerElem node indices
   uint32_t nElems;
-  int nodesPerElem; // 3: triangles, 2: plain edges
-  int sidesPerElem; // 3 sides per triangle, 1 per edge
-  double *attr;     // one value per node, NULL -> flat gray
+  int nodesPerElem;     // 3: triangles, 2: plain edges
+  int sidesPerElem;     // 3 sides per triangle, 1 per edge
+  const double *fields; // field f at node v is fields[nfields*v + f]
+  uint32_t nfields;     // NULL fields -> flat gray
+  int field;            // the rendered one
   double attrMin, attrMax;
-  Box box; // bounding box of the nodes
-} Scene;
+} Object;
 
-// malloc() that stops the program when out of memory
-static void *allocate(size_t bytes)
+static struct
 {
-  void *p = malloc(bytes > 0 ? bytes : 1);
-  if (p == NULL)
+  Object *objs;
+  int n, cap;
+  Box box;   // bounding box of all the nodes, the view is framed on it
+  int shown; // display() drew it: the next scene_add_*() starts a new scene
+} scene;     // what the next (or the last) display() draws
+
+/* Appends an object to the scene and returns its index. A missing or invalid
+ * field leaves it flat gray. */
+static int sceneAdd(const double *xy,
+                    uint32_t nNodes,
+                    const uint32_t *elems,
+                    uint32_t nElems,
+                    int nodesPerElem,
+                    const double *fields,
+                    uint32_t nfields,
+                    int field)
+{
+  if (scene.shown)
   {
-    fprintf(stderr, "[display] out of memory\n");
-    exit(EXIT_FAILURE);
+    scene.n = 0;
+    scene.shown = 0;
   }
-  return p;
-}
+  if (scene.n == scene.cap)
+  {
+    scene.cap = scene.cap ? 2 * scene.cap : 8;
+    scene.objs = realloc(scene.objs, scene.cap * sizeof(Object));
+    if (scene.objs == NULL)
+    {
+      fprintf(stderr, "[display] out of memory\n");
+      exit(EXIT_FAILURE);
+    }
+  }
 
-// a copy of the first `bytes` bytes of src, in memory of its own
-static void *copyOf(const void *src, size_t bytes)
-{
-  void *dst = allocate(bytes);
-  if (bytes > 0)
-    memcpy(dst, src, bytes);
-  return dst;
-}
-
-static void sceneFree(Scene *s)
-{
-  free(s->xy);
-  free(s->elems);
-  free(s->attr);
-  *s = (Scene){0};
-}
-
-/* Replaces s by a copy of the caller's arrays, so that the caller may change
- * them as soon as the display call returns. Field f at node v is
- * fields[nfields*v + f]; only the rendered one is kept. A missing or invalid
- * field leaves the mesh flat gray. */
-static void sceneSet(Scene *s,
-                     const double *xy,
-                     uint32_t nNodes,
-                     const uint32_t *elems,
-                     uint32_t nElems,
-                     int nodesPerElem,
-                     const double *fields,
-                     uint32_t nfields,
-                     int field)
-{
-  sceneFree(s);
+  Object *s = &scene.objs[scene.n];
+  *s = (Object){0};
+  s->xy = xy;
   s->nNodes = (xy != NULL) ? nNodes : 0;
+  s->elems = elems;
   s->nElems = (elems != NULL) ? nElems : 0;
   s->nodesPerElem = nodesPerElem;
   s->sidesPerElem = (nodesPerElem == 3) ? 3 : 1;
-  s->xy = copyOf(xy, 2 * (size_t)s->nNodes * sizeof(double));
-  s->elems = copyOf(elems, (size_t)s->nElems * nodesPerElem * sizeof(uint32_t));
-
-  /* bounding box, the view is framed on it */
-  s->box = (Box){0.0, 1.0, 0.0, 1.0};
-  if (s->nNodes > 0)
-    s->box = (Box){xy[0], xy[0], xy[1], xy[1]};
-  for (uint32_t v = 0; v < s->nNodes; v++)
-  {
-    s->box.xmin = fmin(s->box.xmin, xy[2 * v]);
-    s->box.xmax = fmax(s->box.xmax, xy[2 * v]);
-    s->box.ymin = fmin(s->box.ymin, xy[2 * v + 1]);
-    s->box.ymax = fmax(s->box.ymax, xy[2 * v + 1]);
-  }
-  if (s->box.xmax - s->box.xmin < 1e-30 && s->box.ymax - s->box.ymin < 1e-30)
-  { // all nodes on one spot
-    s->box.xmax += 1;
-    s->box.ymax += 1;
-  }
 
   /* the rendered field, and its range: the colormap is stretched over it */
   s->attrMin = 0.0;
   s->attrMax = 1.0;
-  if (fields == NULL || field < 0 || (uint32_t)field >= nfields ||
-      s->nNodes == 0)
-    return; // flat gray
-  s->attr = allocate(s->nNodes * sizeof(double));
-  for (uint32_t v = 0; v < s->nNodes; v++)
-    s->attr[v] = fields[(size_t)nfields * v + field];
-  s->attrMin = s->attrMax = s->attr[0];
-  for (uint32_t v = 0; v < s->nNodes; v++)
+  if (fields != NULL && field >= 0 && (uint32_t)field < nfields &&
+      s->nNodes > 0)
   {
-    s->attrMin = fmin(s->attrMin, s->attr[v]);
-    s->attrMax = fmax(s->attrMax, s->attr[v]);
+    s->fields = fields;
+    s->nfields = nfields;
+    s->field = field;
+    s->attrMin = s->attrMax = fields[field];
+    for (uint32_t v = 0; v < s->nNodes; v++)
+    {
+      s->attrMin = fmin(s->attrMin, fields[(size_t)nfields * v + field]);
+      s->attrMax = fmax(s->attrMax, fields[(size_t)nfields * v + field]);
+    }
   }
+  return scene.n++;
 }
 
-static Vec2 nodePos(const Scene *s, uint32_t v)
+// bounding box of the nodes of every object
+static Box sceneBox(void)
+{
+  Box box = {0.0, 1.0, 0.0, 1.0};
+  int first = 1;
+  for (int i = 0; i < scene.n; i++)
+  {
+    const Object *s = &scene.objs[i];
+    for (uint32_t v = 0; v < s->nNodes; v++)
+    {
+      double x = s->xy[2 * v], y = s->xy[2 * v + 1];
+      if (first)
+        box = (Box){x, x, y, y};
+      first = 0;
+      box.xmin = fmin(box.xmin, x);
+      box.xmax = fmax(box.xmax, x);
+      box.ymin = fmin(box.ymin, y);
+      box.ymax = fmax(box.ymax, y);
+    }
+  }
+  if (box.xmax - box.xmin < 1e-30 && box.ymax - box.ymin < 1e-30)
+  { // all nodes on one spot
+    box.xmax += 1;
+    box.ymax += 1;
+  }
+  return box;
+}
+
+static Vec2 nodePos(const Object *s, uint32_t v)
 {
   return (Vec2){s->xy[2 * v], s->xy[2 * v + 1]};
 }
 
-static uint32_t elemNode(const Scene *s, uint32_t e, int k)
+static uint32_t elemNode(const Object *s, uint32_t e, int k)
 {
   return s->elems[s->nodesPerElem * e + k];
 }
 
 // side k of element e, as the directed pair of nodes (from -> to)
 static void
-elemSide(const Scene *s, uint32_t e, int k, uint32_t *from, uint32_t *to)
+elemSide(const Object *s, uint32_t e, int k, uint32_t *from, uint32_t *to)
 {
   *from = elemNode(s, e, k);
   *to = elemNode(s, e, (k + 1) % s->nodesPerElem);
 }
 
 // centroid of a triangle, midpoint of an edge
-static Vec2 elemCentre(const Scene *s, uint32_t e)
+static Vec2 elemCentre(const Object *s, uint32_t e)
 {
   Vec2 c = {0.0, 0.0};
   for (int k = 0; k < s->nodesPerElem; k++)
@@ -203,9 +212,8 @@ static Vec2 elemCentre(const Scene *s, uint32_t e)
 /*  View state : what the keyboard and the mouse act on                       */
 /* ========================================================================== */
 
-static GLFWwindow *window; // NULL until the first display_*() call
-static Scene scene;        // a copy of what the last display_*() call got
-static int step;           // number of display_*() calls in this window
+static GLFWwindow *window; // NULL until the first display() call
+static int step;           // number of display() calls in this window
 
 static struct
 {
@@ -288,16 +296,17 @@ static void colormap(double t, float *rgb)
 }
 
 // the colour of a node: its attribute through the colormap, or flat gray
-static void setNodeColor(const Scene *s, uint32_t v)
+static void setNodeColor(const Object *s, uint32_t v)
 {
   float rgb[3];
-  if (s->attr == NULL)
+  if (s->fields == NULL)
   {
     glColor3fv(GRAY);
     return;
   }
   double range = s->attrMax - s->attrMin;
-  double t = range > 0.0 ? (s->attr[v] - s->attrMin) / range : 0.0;
+  double attr = s->fields[(size_t)s->nfields * v + s->field];
+  double t = range > 0.0 ? (attr - s->attrMin) / range : 0.0;
   colormap(t, rgb);
   glColor3fv(rgb);
 }
@@ -407,7 +416,7 @@ static void emitArrow(Vec2 tail, Vec2 tip)
 /* ========================================================================== */
 
 // triangles, one colour per node, interpolated inside the triangle
-static void drawFilled(const Scene *s)
+static void drawFilled(const Object *s)
 {
   glBegin(GL_TRIANGLES);
   for (uint32_t e = 0; e < s->nElems; e++)
@@ -421,7 +430,7 @@ static void drawFilled(const Scene *s)
 }
 
 // every side of every element, in black
-static void drawWireframe(const Scene *s)
+static void drawWireframe(const Object *s)
 {
   glColor3fv(BLACK);
   glBegin(GL_LINES);
@@ -441,7 +450,7 @@ static void drawWireframe(const Scene *s)
  * arrows of a triangle inside it and clear of each other.
  * Side k of element e is half-edge 3*e + k, the numbering of HeObject.h; for an
  * edge list there is one side per element, so the number is the edge index. */
-static void drawHalfEdges(const Scene *s, double textHeight, int withNumbers)
+static void drawHalfEdges(const Object *s, double textHeight, int withNumbers)
 {
   for (uint32_t e = 0; e < s->nElems; e++)
   {
@@ -472,7 +481,7 @@ static void drawHalfEdges(const Scene *s, double textHeight, int withNumbers)
   }
 }
 
-static void drawNodes(const Scene *s)
+static void drawNodes(const Object *s)
 {
   glPointSize(2);
   for (uint32_t v = 0; v < s->nNodes; v++) {
@@ -483,7 +492,7 @@ static void drawNodes(const Scene *s)
   }
 }
 
-static void drawNodeIndices(const Scene *s, double textHeight)
+static void drawNodeIndices(const Object *s, double textHeight)
 {
   for (uint32_t v = 0; v < s->nNodes; v++)
     drawNumber((int)v, nodePos(s, v), textHeight, BLACK);
@@ -561,22 +570,26 @@ static void drawScene(void)
   applyDrag(halfHeight);
   beginFrame(halfHeight, fbW, fbH);
 
-  drawNodes(&scene);
-  if (scene.nodesPerElem == 2)
+  for (int i = 0; i < scene.n; i++)
   {
-    drawWireframe(&scene); // an edge list has nothing to fill
+    const Object *s = &scene.objs[i];
+    drawNodes(s);
+    if (s->nodesPerElem == 2)
+    {
+      drawWireframe(s); // an edge list has nothing to fill
+    }
+    else
+    {
+      if (view.filled)
+        drawFilled(s);
+      if (view.wireframe)
+        drawWireframe(s);
+    }
+    if (view.halfEdges)
+      drawHalfEdges(s, textHeight, view.halfEdges == 2);
+    if (view.nodeIndices)
+      drawNodeIndices(s, textHeight);
   }
-  else
-  {
-    if (view.filled)
-      drawFilled(&scene);
-    if (view.wireframe)
-      drawWireframe(&scene);
-  }
-  if (view.halfEdges)
-    drawHalfEdges(&scene, textHeight, view.halfEdges == 2);
-  if (view.nodeIndices)
-    drawNodeIndices(&scene, textHeight);
 
   glfwSwapBuffers(window);
 }
@@ -619,23 +632,45 @@ static int openWindow(void)
   return 1;
 }
 
-// what display_mesh() and display_edges() both do
-static int show(const double *xy,
-                uint32_t nNodes,
-                const uint32_t *elems,
-                uint32_t nElems,
-                int nodesPerElem,
-                const double *fields,
-                uint32_t nfields,
-                int field)
+/* ========================================================================== */
+/*  Public API                                                                */
+/* ========================================================================== */
+
+int scene_add_mesh(double const *nodes,
+                   uint32_t nnodes,
+                   uint32_t const *elems,
+                   uint32_t nelems,
+                   double const *fields,
+                   uint32_t nfields,
+                   int render_field)
 {
+  return sceneAdd(nodes, nnodes, elems, nelems, 3, fields, nfields, render_field);
+}
+
+int scene_add_edges(double const *nodes,
+                    uint32_t nnodes,
+                    uint32_t const *edges,
+                    uint32_t nedges)
+{
+  return sceneAdd(nodes, nnodes, edges, nedges, 2, NULL, 0, 0);
+}
+
+int scene_add_nodes(double const *nodes, uint32_t nnodes)
+{
+  return sceneAdd(nodes, nnodes, NULL, 0, 2, NULL, 0, 0);
+}
+
+/* Draws the scene as the next step. It is only emptied by the next
+ * scene_add_*(), so that display_wait() still shows the last one. */
+int display(void)
+{
+  scene.shown = 1;
   if (window == NULL && !openWindow())
     return 0;
   if (glfwWindowShouldClose(window))
     return 0; // closed at an earlier step: stop showing
 
-  sceneSet(
-      &scene, xy, nNodes, elems, nElems, nodesPerElem, fields, nfields, field);
+  scene.box = sceneBox();
   step++;
   if (step == 1)
     viewReset();
@@ -644,35 +679,6 @@ static int show(const double *xy,
   snprintf(title, sizeof(title), "2D viewer - step %d", step);
   glfwSetWindowTitle(window, title);
   return handleEvents();
-}
-
-/* ========================================================================== */
-/*  Public API                                                                */
-/* ========================================================================== */
-
-int display_mesh(double const *nodes,
-                 uint32_t nnodes,
-                 uint32_t const *elems,
-                 uint32_t nelems,
-                 double const *fields,
-                 uint32_t nfields,
-                 int render_field)
-{
-  return show(nodes, nnodes, elems, nelems, 3, fields, nfields, render_field);
-}
-
-int display_edges(double const *nodes,
-                  uint32_t nnodes,
-                  uint32_t const *edges,
-                  uint32_t nedges)
-{
-  return show(nodes, nnodes, edges, nedges, 2, NULL, 0, 0);
-}
-
-int display_nodes(double const *nodes,
-                  uint32_t nnodes)
-{
-  return show(nodes, nnodes, NULL, 0, 2, NULL, 0, 0);
 }
 
 void display_wait(void)
@@ -685,5 +691,7 @@ void display_wait(void)
   glfwTerminate();
   window = NULL;
   step = 0;
-  sceneFree(&scene);
+  free(scene.objs);
+  scene.objs = NULL;
+  scene.n = scene.cap = scene.shown = 0;
 }

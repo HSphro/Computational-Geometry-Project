@@ -7,23 +7,26 @@
 extern "C" {
 #endif
 
-/* The viewer shows a mesh, lets your code change it, then shows it again:
+/* The viewer shows a scene, lets your code change it, then shows it again:
  *
- *   while (display_mesh(...)) {   // waits for space, 0 once the window closes
- *       if (!myAlgorithmStep(mesh))
- *           break;
- *   }
- *   display_wait();               // keep the final mesh on screen
+ *   do {
+ *       scene_add_mesh(...);      // as many scene_add_*() as you want
+ *       scene_add_nodes(...);
+ *   } while (display() && myAlgorithmStep(mesh)); // 0 once the window closes
+ *   display_wait();               // keep the last scene on screen
  *
- * To just look at a mesh: display_mesh(...); display_wait();
+ * To just look at a mesh: scene_add_mesh(...); display(); display_wait();
  *
- * The window opens at the first display_*() call and stays open until
- * display_wait(). Each display_*() call returns when the user presses space
- * (holding space runs through the steps).
- * The arrays are copied: once the call returns you may change or free them.
+ * The window opens at the first display() call and stays open until
+ * display_wait(). Each display() call returns when the user presses space
+ * (holding space runs through the steps), and the next scene_add_*() starts
+ * a new scene.
+ * The arrays are NOT copied: they must stay valid until display() returns,
+ * and those of the last scene until display_wait() returns.
  */
 
-/* Displays a triangle mesh, as the next step
+
+/* Add a triangle mesh in the next frame
  *
  * A NULL fields pointer, zero nfields or an invalid render_field displays a
  * plain grey mesh.
@@ -38,16 +41,15 @@ extern "C" {
  *                Size = nnodes*nfields
  * @param nfields: the number of different fields that are stored.
  * @param render_field: the index of the field to render
- * @return 1 to go on, 0 if the window was closed (every later call then
- *         returns 0 at once, until display_wait())
+ * @return id The id of the mesh in the scene (its index)
  */
-int display_mesh(
+int scene_add_mesh(
     double   const * nodes,  uint32_t nnodes,
     uint32_t const * elems,  uint32_t nelems,
     double   const * fields, uint32_t nfields,
     int render_field);
 
-/* Displays a list of edges, as the next step
+/* Add an edge list in the next frame
  *
  * @param nodes: the coordinates of the nodes, in row major.
  *               Size = 2*nnodes
@@ -55,25 +57,30 @@ int display_mesh(
  * @param edges: the edges to draw, in row major.
  *               Size = 2*nedges
  * @param nedges: the number of edges
- * @return 1 to go on, 0 if the window was closed, as for display_mesh()
+ * @return id The id of the edge list in the scene (its index)
  */
-int display_edges(
+int scene_add_edges(
     double   const * nodes, uint32_t nnodes,
     uint32_t const * edges, uint32_t nedges);
 
-
-/* Displays a list of nodes, as the next step
+/* Add a node list in the next frame
  *
  * @param nodes: the coordinates of the nodes, in row major.
  *               Size = 2*nnodes
  * @param nnodes: the number of nodes
- * @return 1 to go on, 0 if the window was closed, as for display_mesh()
+ * @return id The id of the node list in the scene (its index)
  */
-int display_nodes(double const * nodes, uint32_t nnodes);
+int scene_add_nodes(double const * nodes, uint32_t nnodes);
 
-/* Keeps the last mesh or edges shown on screen until the user closes the
- * window, then frees the viewer. The next display_*() call opens a new
- * window. */
+/* Shows the created scene (using scene_add_...)
+ *
+ * @return 1 to go on, 0 if the window was closed (every later call then
+ *         returns 0 at once, until display_wait())
+ */
+int display(void);
+
+/* Keeps the last scene shown on screen until the user closes the window,
+ * then frees the viewer. The next display() call opens a new window. */
 void display_wait(void);
 
 #ifdef __cplusplus

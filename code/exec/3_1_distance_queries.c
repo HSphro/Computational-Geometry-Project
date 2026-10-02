@@ -234,9 +234,10 @@ int main(int argc, char** argv) {
         printf("Time to query all distances: %.5f\n", 
                 (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec)*1e-9);
         
-        display_edges(bnd.nodes, bnd.nnodes, bnd.edges, bnd.nedges); // Boundary
-        display_edges(neighbor_nodes, 2*nq, neighbor_edges, nq); // neirest node segment
-        display_nodes(query_nodes, nq);
+        scene_add_edges(bnd.nodes, bnd.nnodes, bnd.edges, bnd.nedges); // Boundary
+        scene_add_edges(neighbor_nodes, 2*nq, neighbor_edges, nq); // neirest node segment
+        scene_add_nodes(query_nodes, nq);
+        display();
         display_wait();
 
         free(neighbor_edges);
@@ -261,9 +262,11 @@ int main(int argc, char** argv) {
             neighbor_edges[0] = 0;
             neighbor_edges[1] = 1;
 
-            display_edges(bnd.nodes, bnd.nnodes, bnd.edges, bnd.nedges); // Boundary
-            display_edges(neighbor_nodes, 2, neighbor_edges, 1); // neirest node segment
-            display_nodes(query_nodes, nq);
+            scene_add_edges(bnd.nodes, bnd.nnodes, bnd.edges, bnd.nedges); // Boundary
+            scene_add_edges(neighbor_nodes, 2, neighbor_edges, 1); // neirest node segment
+            scene_add_nodes(query_nodes, nq);
+            if (!display())
+                break;
         }
         display_wait();
         

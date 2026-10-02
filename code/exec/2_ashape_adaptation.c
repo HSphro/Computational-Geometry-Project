@@ -195,7 +195,8 @@ int main(int argc, char** argv) {
         mesh_triangulate(&mesh);
 
         if (show_initial_mesh) {
-            display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            scene_add_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            display_continue = display();
             if (!display_continue) {
                 break;
             }
@@ -210,7 +211,8 @@ int main(int argc, char** argv) {
         mesh_delete_elements(&mesh, to_delete);
 
         if (show_deleted_elems) {
-            display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            scene_add_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+            display_continue = display();
             if (!display_continue) {
                 break;
             }
@@ -220,7 +222,8 @@ int main(int argc, char** argv) {
         mesh_adapt(&mesh, NULL, 0);
 
         // By default only show the final adapted mesh
-        display_continue = display_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+        scene_add_mesh(mesh.nodes, mesh.nnodes, mesh.elems, mesh.nelems, NULL, 0, 0);
+        display_continue = display();
         if (!display_continue) {
             break;
         }

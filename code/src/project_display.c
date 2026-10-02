@@ -669,6 +669,12 @@ int display_edges(double const *nodes,
   return show(nodes, nnodes, edges, nedges, 2, NULL, 0, 0);
 }
 
+int display_nodes(double const *nodes,
+                  uint32_t nnodes)
+{
+  return show(nodes, nnodes, NULL, 0, 2, NULL, 0, 0);
+}
+
 void display_wait(void)
 {
   if (window == NULL)

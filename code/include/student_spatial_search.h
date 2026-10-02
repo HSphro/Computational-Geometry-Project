@@ -165,15 +165,21 @@ void quadtree_set_edges(quadtree_st * qt, double const * nodes, uint32_t const *
  */
 void quadtree_build(quadtree_st* qt);
 
+typedef struct {
+    uint32_t neirest_edge_id;  // Index of the neirest edge in the quadtree
+    double distance;           // Distance between the query node and the neirest edge
+    double p[2];               // Coordinate of the point on the edge that is closest to the query
+} neirest_edge_st;
+
 /* For a given node (px, py), find the closest edge in the quadtree
  *
  * @param qt [in]: the quadtree to use for the search 
  * @param px [in]: the x position of the node
  * @param py [in]: the y position of the node
  *
- * @return edge_idx: the index of the closest edge.
+ * @return neirest: the info about the neirest edge (index, distance, closest point, ...)
  */
-uint32_t quadtree_find_closest_edge(quadtree_st const* qt, double const px, double const py);
+neirest_edge_st quadtree_find_closest_edge(quadtree_st const* qt, double const px, double const py);
 
 
 // Represent an edge-edge intersection
@@ -190,7 +196,7 @@ typedef struct {
  * @param s [in]:  the index of the edge's source node
  * @param t [in]:  the index of the edge's target node
  *
- * @return edge_idx: the index of the closest edge.
+ * @return intersection: the info about the intersection (id of edge, position of intersection, ...)
  */
 intersection_st quadtree_find_intersecting_edge(quadtree_st const* qt, double const * nodes, uint32_t s, uint32_t t);
 

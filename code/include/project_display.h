@@ -61,6 +61,16 @@ int display_edges(
     double   const * nodes, uint32_t nnodes,
     uint32_t const * edges, uint32_t nedges);
 
+
+/* Displays a list of nodes, as the next step
+ *
+ * @param nodes: the coordinates of the nodes, in row major.
+ *               Size = 2*nnodes
+ * @param nnodes: the number of nodes
+ * @return 1 to go on, 0 if the window was closed, as for display_mesh()
+ */
+int display_nodes(double const * nodes, uint32_t nnodes);
+
 /* Keeps the last mesh or edges shown on screen until the user closes the
  * window, then frees the viewer. The next display_*() call opens a new
  * window. */

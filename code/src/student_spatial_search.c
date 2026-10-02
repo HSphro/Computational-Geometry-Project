@@ -77,8 +77,8 @@ void quadtree_build(quadtree_st* qt) {
     // compute the hierarchy/bounding boxes ...
 }
 
-uint32_t quadtree_find_closest_edge(quadtree_st const* qt, double const px, double const py) {
-    return 0;
+neirest_edge_st quadtree_find_closest_edge(quadtree_st const* qt, double const px, double const py) {
+    return (neirest_edge_st) {0};
 }
 
 intersection_st quadtree_find_intersecting_edge(quadtree_st const* qt, double const * nodes, uint32_t s, uint32_t t) {

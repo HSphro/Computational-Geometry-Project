@@ -5,6 +5,7 @@ set(EXEC_LIST
     0_example_viewer
     1_triangulation
     2_ashape_adaptation
+    3_1_distance_queries
 )
 
 foreach(EXEC ${EXEC_LIST})

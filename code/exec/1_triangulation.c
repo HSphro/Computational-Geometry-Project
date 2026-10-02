@@ -8,24 +8,38 @@
 #include "student_triangulation.h"
 #include "project_display.h"
 
-/* This is a program to help you visualize the first part of the project. 
+/* This is a program to help you visualize the first part of the project (triangulation). 
+ * You can use it as a baseline to test your triangulation (and its speed).
  *
- * It is called the "vortex in a box" and is a classical test-case for research in 
- * surface recovery and surface tracking. 
+ * To give you an idea: 
+ *    scipy.spatial.Delaunay takes 4.7s for 1 million uniform 2D points on my machine.
+ *    An ok-ish C implementation can do 2s.
+ *    A good C implementation can reach 0.5s.
  *
- * It is simply a set of nodes (forming a disk) that is advected through a divergence-free 
- * vortex. 
+ * You can choose between different point set distributions:
+ * 1. point on a perfect circle 
+ * 2. points inside a disk
+ * 3. uniform sampling in a square 
+ * 4. perfect grid
+ * 5. points along a line with a single point out of line
+ * 6. points along a jagged line
  *
- * You can use it as a baseline to test: 
- * - Your triangulation (and its speed)
- * - Your alpha-shape
- * - Your mesh adaptation
+ * Some of these point set are really stress testing the triangulation and might 
+ * require you to really think about the edge cases. 
  *
+ * I advise you to make sure your triangulation works on the sets 1-4 and come 
+ * back to the 5 and 6 only when you've finished the rest of the project.
+ *
+ * Note also that for 1, 4, 5, 6 you can compute a priori the exact number 
+ * of triangles and boundary edges. This can help you make sure it is correct.
+ *
+ * The program is designed to show you the complete triangulation at once, but 
+ * you can tweak it to show each point insertion once you've implemented the functions
  */
 
 void print_usage(void) {
     printf(
-            "USAGE: ./exec/ashape_adaptation_view [--help] -n <number of nodes> --dist <circle|disk|uniform|grid|line|jagged> --eps <epsilon value>\n"
+            "USAGE: ./exec/1_triangulation [--help] -n <number of nodes> --dist <circle|disk|uniform|grid|line|jagged> --eps <epsilon value>\n"
             "\t -n  INT       The number of nodes to generate \n"
             "\t --dist STRING The point distribution\n"
             "\t --eps FLOAT   The epsilon value for 'line' and 'jagged' distributions"
@@ -259,5 +273,7 @@ int main(int argc, char** argv) {
     display_wait();
 
     free(nodes);
+    free(mesh.elems);
+
     return EXIT_SUCCESS;
 }

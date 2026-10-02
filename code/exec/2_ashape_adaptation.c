@@ -7,19 +7,23 @@
 #include "student_triangulation.h"
 #include "project_display.h"
 
-/* This is a program to help you visualize the first part of the project. 
- *
- * It is called the "vortex in a box" and is a classical test-case for research in 
- * surface recovery and surface tracking. 
- *
- * It is simply a set of nodes (forming a disk) that is advected through a divergence-free 
- * vortex. 
+/* This is a program to help you visualize part 2 of the project 
+ * (alpha-shape + mesh adaptation). Your need a functioning triangulation for this step.
  *
  * You can use it as a baseline to test: 
  * - Your triangulation (and its speed)
  * - Your alpha-shape
  * - Your mesh adaptation
  *
+ * It is called the "vortex in a box" and is a classical test-case for research in 
+ * surface recovery and surface tracking. 
+ *
+ * It is simply a set of nodes (forming a disk) that is advected through a divergence-free 
+ * vortex. You'll quickly see that the point set becomes distorted as time advances. 
+ * Hence the mesh quality degrades as well: that's where mesh adaptation comes in !
+ *
+ * The goal is to keep the mesh's surface as constant as possible. 
+ * The better your mesh-adaptation is, the longer you'll be able to keep the surface.
  */
 
 #ifdef _WIN32
@@ -77,7 +81,7 @@ static void advect_node_rk4(double * const nodes, uint32_t nnodes, double dt, do
 
 void print_usage(void) {
     printf(
-            "USAGE: ./exec/ashape_adaptation_view [--help] -n <number of nodes> -T <final time> -dt <time step> -f <max fps> -i -d\n"
+            "USAGE: ./exec/2_ashape_adaptation [--help] -n <number of nodes> -T <final time> -dt <time step> -f <max fps> -i -d\n"
             "\t -n  INT    The number of nodes to generate \n"
             "\t -T  FLOAT  The total time (higher = more winding)\n"
             "\t -dt FLOAT  The time steps\n"
@@ -234,5 +238,6 @@ int main(int argc, char** argv) {
 
     free(to_delete);
     free(nodes);
+    free(mesh.elems);
     return EXIT_SUCCESS;
 }

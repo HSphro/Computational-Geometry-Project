@@ -50,7 +50,7 @@ void generate_line(boundary_st * const bnd, uint32_t nb) {
 
     // Generate a line from 0 to 1 discretized with nb nodes and ne segments
     for (uint32_t i = 0; i < nb; ++i){
-        nodes[2*i] = (double) i / nb;
+        nodes[2*i] = (double) i / nb - 0.5;
         nodes[2*i+1] = 0.0;
     }
     for (uint32_t i = 0; i < ne; ++i){

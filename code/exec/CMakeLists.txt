@@ -6,6 +6,7 @@ set(EXEC_LIST
     1_triangulation
     2_ashape_adaptation
     3_1_distance_queries
+    3_2_intersection_queries
 )
 
 foreach(EXEC ${EXEC_LIST})

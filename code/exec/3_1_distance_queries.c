@@ -9,6 +9,14 @@
 #include "student_spatial_search.h"
 #include "student_triangulation.h"
 
+/* This is a program to help you visualize part 3 of the project (quadtree queries)
+ *
+ * You can use it as a baseline to test: 
+ * - The quadtree construction speed 
+ * - The quadtree parameters 
+ * - The node to curve distance queries
+ */
+
 void print_usage(void) {
     printf(
             "USAGE: ./exec/3_1_distance_queries [--help] --nb <number of nodes> --nq <number of queries> --bs <bucket size> --depth <maximum depth> --boundary <line|circle> --one-by-one\n"

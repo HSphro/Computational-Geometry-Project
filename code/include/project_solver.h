@@ -13,12 +13,6 @@ typedef enum {
     WALL = 2           // The node is on the boundary of the mesh and in contact with a solid wall
 } node_type_et; 
 
-// Info about the solver that can be queried afterward
-typedef struct {
-    int success;    
-    //... Whatever feels useful
-} solver_status_st;
-
 // Physical properties of the material
 typedef struct {
     double density;      // rho
@@ -26,6 +20,26 @@ typedef struct {
     double gravity[2];   // gravity in x, y
     double dt;           // time step
 } physical_props_st;
+
+// Info about the solver that can be queried afterward
+typedef struct {
+    int success;    
+    //... Whatever feels useful
+} solver_status_st;
+
+typedef struct {
+    // Contains the state of the solver
+    solver_status_st status;
+} solver_st;
+
+/* Create a solver object. Contains the solver state/memory */
+solver_st* solver_create(void);
+
+/* Destroy a solver object 
+ * 
+ * @param solver [in]: the solver object to destroy
+ */
+void solver_destroy(solver_st* solver);
 
 /* Calls the fluid solver. 
  *
@@ -53,6 +67,7 @@ typedef struct {
  * @return status: the status of the solver
  */
 solver_status_st solve_navier_stokes(
+    solver_st* solver,
     double   const * nodes, uint32_t nnodes, 
     uint32_t const * elems, uint32_t nelems, 
     node_type_et const * node_type, 

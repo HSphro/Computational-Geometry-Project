@@ -7,6 +7,7 @@ set(EXEC_LIST
     2_ashape_adaptation
     3_1_distance_queries
     3_2_intersection_queries
+    4_complete_project
 )
 
 foreach(EXEC ${EXEC_LIST})

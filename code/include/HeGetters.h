@@ -20,8 +20,8 @@
 const double* getNodes(const Mesh* mesh, int* nNodes);
 
 // Triangle connectivity, 3*nTriangles node indices: {t0a,t0b,t0c, t1a, ...}
-// Equivalent to the origin array : the triangles owns the half-edges, 
-// i.e. 3t, 3t+1 and 3t+2, origin[3t+i] already is the i-th node of triangle t
+// The triangles owns the half-edges, i.e. 3t, 3t+1 and 3t+2,
+// triangles[3t+i] is the i-th node of triangle t and the origin of he 3t+i
 const int* getTriangles(const Mesh* mesh, int* nTriangles);
 
 // (For later) Size field, one double per node.
@@ -38,9 +38,7 @@ const double* getNodeVel(const Mesh* mesh, int* nNodes);
 // One outgoing half-edge per node (HE_BOUNDARY if the node is isolated).
 const int* getStartHE(const Mesh* mesh, int* nNodes);
 
-// The three half-edge arrays, 3*nTriangles entries each.
-const int* getHeOrigin(const Mesh* mesh, int* nHalfEdges);
-const int* getHeNext(const Mesh* mesh, int* nHalfEdges);
+// The twin array, 3*nTriangles entries.
 const int* getHeTwin(const Mesh* mesh, int* nHalfEdges);
 
 int getNumNodes(const Mesh* mesh);

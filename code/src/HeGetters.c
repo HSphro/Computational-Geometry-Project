@@ -22,7 +22,7 @@ const double* getNodes(const Mesh* mesh, int* nNodes)
 const int* getTriangles(const Mesh* mesh, int* nTriangles)
 {
     setCount(nTriangles, mesh->nTriangles);
-    return mesh->origin;        // Recall : the triangles own the half-edges, hence "triangles" and "origin" give the same nodes :-) 
+    return mesh->triangles;
 }
 
 const double* getSizefield(const Mesh* mesh, int* nNodes)
@@ -47,18 +47,6 @@ const int* getStartHE(const Mesh* mesh, int* nNodes)
 {
     setCount(nNodes, mesh->nNodes);
     return mesh->startHE;
-}
-
-const int* getHeOrigin(const Mesh* mesh, int* nHalfEdges)
-{
-    setCount(nHalfEdges, 3 * mesh->nTriangles);
-    return mesh->origin;
-}
-
-const int* getHeNext(const Mesh* mesh, int* nHalfEdges)
-{
-    setCount(nHalfEdges, 3 * mesh->nTriangles);
-    return mesh->next;
 }
 
 const int* getHeTwin(const Mesh* mesh, int* nHalfEdges)

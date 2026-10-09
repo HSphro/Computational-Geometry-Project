@@ -5,7 +5,7 @@
 /*
  * Nodes :  {coords, nodeId, He, nodeType, sizeField, nodeVelocity}
  * Elem  :  {elemId, He}
- * HalfE :  {origin, twin, next}
+ * HalfE :  {triangles, twin}
  *
  * ---------------------------------------------------------------------------
  * CONVENTIONS: to read :-)
@@ -13,19 +13,19 @@
  *
  * 1) Triangle `t` OWNS the three half-edges 3*t, 3*t+1, 3*t+2, in that order:
  *
- *              origin[3t+2]
+ *              triangles[3t+2]
  *                   x
  *                  / \
  *       he 3t+2   /   \   he 3t+1
  *                /     \
  *               x-------x
- *      origin[3t]  he 3t  origin[3t+1]
+ *   triangles[3t]  he 3t  triangles[3t+1]
  *
  *    Consequences:
- *      - next[3t+i] == 3t + (i+1)%3          (always, never stored differently)
+ *      - heNext(3t+i) == 3t + (i+1)%3        (computed, never stored)
  *      - the triangle of half-edge h is      h/3
- *      - `origin` IS the triangle connectivity array: origin[3t+i] is the
- *         i-th node of triangle t.
+ *      - `triangles` IS the triangle connectivity array: triangles[3t+i] is the
+ *         i-th node of triangle t, and the origin of half-edge 3t+i.
  *
  * 2) Half-edges turn COUNTER-CLOCKWISE around their triangle.
  *
@@ -33,7 +33,7 @@
  *
  * 4) startHE[v] is one half-edge whose origin is v. If v sits on the boundary,
  *    we always store the outgoing half-edge that is itself on the boundary, so
- *    that turning around v with twin/next visits the whole one-ring.
+ *    that turning around v with twin/heNext visits the whole one-ring.
  *
  * ---------------------------------------------------------------------------
  * MEMORY
@@ -67,11 +67,11 @@ struct Mesh{
      *
      * Every arrays to describe the half-edges objects (3*allocTriangles)
      */
-    int* origin;        // Idx of the node that is the he origin (3*allocTriangles)
-    int* next;          // Idx of the next he, belongs to the same elem (3*allocTriangles)
-                        // Small note. In theory, the next array is redundant with origin and can be recovered as : next[h] == 3*(h/3) + (h%3 + 1)%3 
+    int* triangles;     // Idx of the node that is the he origin (3*allocTriangles)
     int* twin;          // Idx of the twin he, belongs to a neighbour elem (3*allocTriangles)
 };
+
+static inline int heNext(int he) { return 3*(he/3) + (he + 1)%3; }
 
 
 /* --- allocation ---------------------------------------------------------- */
@@ -104,17 +104,17 @@ Mesh* meshInitFromArrays(const double* coords, int nNodes,
 // Appends a node, returns its index.
 int meshAddNode(Mesh* mesh, double x, double y);
 
-// Appends an empty triangle (3 fresh half-edges, next[] wired, twins unset),
+// Appends an empty triangle (3 fresh half-edges, twins unset),
 // returns its index. Its half-edges are 3*t, 3*t+1, 3*t+2.
 int meshAddTriangle(Mesh* mesh);
 
-// origin[3t..3t+2] = v0,v1,v2 (does NOT touch the twins).
+// triangles[3t..3t+2] = v0,v1,v2 (does NOT touch the twins).
 void meshSetTriangleNodes(Mesh* mesh, int t, int v0, int v1, int v2);
 
 // Glues two half-edges together, -1 (HE_BOUNDARY) is accepted on either side.
 void meshSetTwins(Mesh* mesh, int he0, int he1);
 
-// startHE[origin[he]] = he, keeping convention 4) above.
+// startHE[triangles[he]] = he, keeping convention 4) above.
 void meshUpdateStartHE(Mesh* mesh, int he);
 
 // Checks every invariant, prints what is broken. Returns the number of errors.

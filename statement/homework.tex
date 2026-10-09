@@ -7,6 +7,7 @@
 \usepackage{lmodern}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{graphicx}
+\usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
@@ -55,7 +56,7 @@
   enhanced, breakable, colback=white, colframe=ucgrey,
   boxrule=0.6pt, arc=1pt, left=8pt, right=8pt, top=5pt, bottom=5pt,
   before skip=6pt, after skip=6pt,
-  fonttitle=\bfseries\color{ucgrey}, title={Note}
+  fonttitle=\bfseries, coltitle=white, title={Note}
 }
 
 % ---------------------------------------------------------------- code listings
@@ -98,15 +99,23 @@
   {\color{navy}\Huge\bfseries Computational Geometry}\\[6pt]
   {\color{navy!80}\Large Homework --- Delaunay Triangulation, Alpha Shapes \& PFEM}\\[10pt]
   {\large LMECA2170 \quad$\cdot$\quad Academic year 2026--2027}\\[8pt]
-  {\color{ucgrey}Miguel Delecourt \(\cdot\) Vincent Legat \(\cdot\) Kerem Okyay \(\cdot\)
-  Illy Perl \(\cdot\) Alexandre Pirot \(\cdot\)
+  {\color{ucgrey}Miguel De Le Court \(\cdot\) Vincent Legat \(\cdot\) Kerem Okyay \(\cdot\)
+  Illy Perl \(\cdot\) Alexandre Pirot \(\cdot\). \\
   Jean-Fran\c{c}ois Remacle \(\cdot\) Felix Ruyfellaere \(\cdot\) Nathan Tihon}\\[2pt]
   {\color{ucgrey}Universit\'e catholique de Louvain}
 \end{center}
 
 \vspace{0.6em}
-{\color{ucblue}\rule{\linewidth}{0.8pt}}
+\noindent{\color{ucblue}\rule{\linewidth}{0.8pt}}
 \vspace{0.8em}
+
+\noindent
+The project framework is available in the Git repository:\\
+\url{https://git.immc.ucl.ac.be/tihonn/lmeca2170-project}
+
+\begin{center}
+  \includegraphics[width=\linewidth]{figures/wheel_illus_boundaries.pdf}
+\end{center}
 
 \noindent
 This homework has three parts, each building directly on the previous one. In
@@ -114,10 +123,13 @@ This homework has three parts, each building directly on the previous one. In
 triangulation on top of a half-edge data structure, and filter it into an
 \emph{alpha shape}. In \textbf{Part~2} you improve that alpha shape by
 inserting Steiner points with \textbf{Chew's algorithm}, reusing the exact
-same insertion routine you wrote in Part~1. In \textbf{Part~3} you assemble
-everything into a \textbf{PFEM} (Particle Finite Element Method) time-stepping
-loop for free-surface flows, in which the alpha shape of Part~1 is recomputed
-at \emph{every time step} to track the moving fluid domain.
+same insertion routine you wrote in Part~1. In \textbf{Part~3} you implement
+ a \textbf{spatial search structure} for nearest-edge queries and collision
+detection. Finally, you assemble everything into a \textbf{PFEM} (Particle
+Finite Element Method) time-stepping loop for free-surface flows. At every
+time step, the alpha shape tracks the moving fluid domain, mesh refinement
+maintains mesh quality, and the search structure identifies contact with
+solid walls and detects particle displacements crossing them.
 
 \begin{note}
 Read the whole statement once before starting to code: the three parts share
@@ -158,10 +170,39 @@ simplest one to keep synchronized while triangles are created and destroyed:
     edge is on the boundary.
 \end{itemize}
 
+\begin{center}
+\begin{tikzpicture}[scale=2.4,>=stealth,font=\small]
+  \coordinate (A) at (0,0); \coordinate (B) at (2,0);
+  \coordinate (C) at (2,1.5); \coordinate (D) at (0,1.5);
+  \draw[thick] (A)--(B)--(C)--(D)--cycle (A)--(C);
+  \foreach \P/\n/\pos in {A/0/below left,B/1/below right,C/2/above right,D/3/above left}
+    \fill (\P) circle (1.5pt) node[\pos] {$p_\n$};
+  \node at (1.45,.48) {$t_0$}; \node at (.55,1.02) {$t_1$};
+  \draw[->,navy] (.3,.12)--(1.6,.12) node[midway,above] {0};
+  \draw[->,navy] (1.88,.25)--(1.88,1.2) node[midway,left] {1};
+  \draw[->,navy] (1.55,1.02)--(.55,.27) node[midway,below right] {2};
+  \draw[->,ucorange] (.45,.48)--(1.45,1.23) node[midway,above left] {3};
+  \draw[->,ucorange] (1.7,1.38)--(.4,1.38) node[midway,below] {4};
+  \draw[->,ucorange] (.12,1.2)--(.12,.3) node[midway,right] {5};
+\end{tikzpicture}
+\qquad
+\begin{tabular}{c|rrr|rrr}
+\toprule
+Half-edge & 0 & 1 & 2 & 3 & 4 & 5 \\
+\midrule
+\texttt{triangles} & 0 & 1 & 2 & 0 & 2 & 3 \\
+\texttt{opposite} & $-1$ & $-1$ & 3 & 2 & $-1$ & $-1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The arrows show half-edge indices; only half-edges 2 and 3 are twins.
+The four outer half-edges have no opposite in this finite mesh.
+
 This representation is compact, cache-friendly, and --- crucially for this
 homework --- \emph{local}: inserting a point only touches the half-edges of
 the triangles being removed and created, never the whole mesh.
 
+\needspace{7\baselineskip}
 \begin{task}\label{tsk:halfedge}
 Implement the half-edge structure above (or an equivalent one of your
 choice) together with the elementary queries you will need: the two
@@ -169,90 +210,66 @@ triangles sharing an edge, the three neighbours of a triangle, and the
 vertices of a triangle in CCW order.
 \end{task}
 
-\subsection*{1.2 --- Bootstrapping: three points at infinity}
+\subsection*{1.2 --- Bootstrapping: one point at infinity}
 
-Incremental insertion needs \emph{some} triangulation to start from. Resist
-the temptation to fake this with 3 extra vertices placed ``far enough away''
-at some large finite coordinate: how far is far enough depends on $S$, gets
-this wrong silently (a triangulation that is simply \emph{wrong}, not a
-crash), and re-introduces exactly the floating-point magnitude problems this
-course spends so much time warning you about. The correct construction uses
-3 genuine \textbf{points at infinity} $q_0,q_1,q_2$, and adapts
-\lstinline{orient2d}/\lstinline{incircle} to handle them --- exactly,
-with no tuning parameter at all.
+Use a single \textbf{symbolic vertex at infinity} $q_\infty$, with no finite
+coordinates. Start from three non-collinear input points $p_a,p_b,p_c$ in
+counter-clockwise order. Create their finite triangle and the three
+\emph{ghost triangles}
+\[
+ (p_b,p_a,q_\infty),\qquad (p_c,p_b,q_\infty),\qquad
+ (p_a,p_c,q_\infty).
+\]
+Connect all twins, including the edges incident to $q_\infty$. A ghost
+triangle represents the exterior half-plane to the left of its oriented
+finite edge. Thus its finite edge is opposite to the corresponding edge
+of the finite convex hull. Always store $q_\infty$ in the \textbf{third slot}
+of a ghost triangle, using a cyclic permutation and updating half-edge
+indices consistently. Never pass this symbolic index to coordinate-based
+arithmetic.
 
-Represent each $q_k$ not by coordinates but by a \textbf{direction}
-$d_k\in\mathbb{R}^2$ (e.g.\ three unit vectors $120^\circ$ apart). The
-starting triangulation is the single triangle $(q_0,q_1,q_2)$: since the
-three directions span the whole circle, every finite point is, by
-convention, inside it --- no test is ever needed to check this.
+For a finite point $D$, only two cavity-predicate cases are needed:
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Finite triangle $(A,B,C)$}, listed CCW: use the usual
+    robust \lstinline{incircle(A,B,C,D)} predicate.
+  \item \textbf{Ghost triangle $(A,B,q_\infty)$}: use
+    \[
+      \operatorname{incircle}(A,B,q_\infty,D)>0
+      \quad\Longleftrightarrow\quad
+      \operatorname{orient2d}(A,B,D)>0.
+    \]
+    A positive sign means that $D$ lies outside the current convex hull,
+    on the exterior side represented by this ghost triangle.
+\end{itemize}
+Handle zero predicates consistently. Detect duplicate points and the
+all-collinear input case explicitly; the latter has no two-dimensional
+triangulation. This construction avoids a large finite super-triangle and
+requires no arbitrary ``far away'' coordinates.
 
-\paragraph{Extending orient2d.} Write $A,B,C$ for the (finite or infinite)
-vertices of the predicate. If a vertex is infinite with direction $d$, its
-homogeneous row is $(d_x,d_y,0)$ instead of $(x,y,1)$; expanding the usual
-$3\times3$ determinant with such a row gives the following closed forms
-(each derivable from the others by the cyclic symmetry
-$\text{orient2d}(A,B,C)=\text{orient2d}(B,C,A)$):
+\subsection*{1.3 --- Insertion order: sorting indices along a Hilbert curve}
 
+A Hilbert space-filling curve can improve spatial locality during point
+insertion. Compute a Hilbert key for each point, then sort an array of
+\textbf{point indices}, leaving coordinates and nodal fields in their
+original order. For example,
 \begin{center}
-\begin{tabular}{@{}ll@{}}
+\begin{tabular}{lrrrr}
 \toprule
-Case & Formula \\
+Point index & 0 & 1 & 2 & 3 \\
+Hilbert key & 8 & 56 & 34 & 1 \\
 \midrule
-$A,B,C$ all finite & the usual determinant \\
-$C=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(B{-}A,\,d)$ \\
-$B=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(d,\,C{-}A)$ \\
-$A=\infty$, direction $d$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(C{-}B,\,d)$ \\
-$B,C=\infty$, directions $d_B,d_C$ & $\text{orient2d}(A,B,C)=\mathrm{cross}(d_B,d_C)$ (constant, any finite $A$)\\
+Insertion order & 3 & 0 & 2 & 1 \\
 \bottomrule
 \end{tabular}
 \end{center}
-
-where $\mathrm{cross}(u,v)=u_xv_y-u_yv_x$. No division, no large
-coordinates, no loss of precision --- ever.
-
-\paragraph{Extending incircle.} The point $D$ being inserted is always
-finite; $A,B,C$ are the vertices of the candidate triangle (listed CCW).
-
-\begin{itemize}[leftmargin=1.4em]
-  \item \textbf{0 infinite vertices}: the usual \lstinline{incircle}
-    determinant.
-  \item \textbf{1 infinite vertex}, say $C=\infty$ in direction $d$: as $C$
-    recedes to infinity the circumcircle of $A,B,C$ degenerates into the
-    \emph{half-plane} bounded by line $AB$, on the side $d$ points to. Hence
-    $$\text{incircle}(A,B,C,D) \ \text{has the same sign as}\ \text{orient2d}(A,B,D).$$
-    (Cyclically rotate if $A$ or $B$ is the infinite one instead: e.g.\ if
-    $A=\infty$, use $\text{orient2d}(B,C,D)$.)
-  \item \textbf{2 infinite vertices}, say $B=\infty$ (direction $d_B$) and
-    $C=\infty$ (direction $d_C$), with $A$ finite: the circumcircle
-    degenerates into the infinite \emph{angular wedge}, based at $A$, swept
-    counter-clockwise from $d_B$ to $d_C$. Hence
-    $$\text{incircle}(A,B,C,D) > 0 \iff \text{orient2d}(A,A{+}d_B,D)>0 \ \text{ and }\ \text{orient2d}(A,D,A{+}d_C)>0.$$
-  \item \textbf{3 infinite vertices}: only the very first (bootstrap)
-    triangle; it is never tested, since $S$'s first point is inside it by
-    construction.
-\end{itemize}
-
-\begin{note}
-Every case above reduces to one or two calls to \lstinline{orient2d} ---
-you never need to evaluate a circumcircle when an infinite vertex is
-involved. This is not a coincidence: it is exactly why using true points at
-infinity is both simpler \emph{and} more robust than a large finite
-super-triangle.
-\end{note}
-
-\subsection*{1.3 --- Insertion order: sorting along a Hilbert curve}
-
-Insert the points of $S$ one at a time --- but not in an arbitrary order.
-Sort $S$ along a \textbf{Hilbert space-filling curve} first. Consecutive
-points along the curve are guaranteed to be close together in the plane, so
-each new point almost always lands close to where the \emph{previous} one
-was inserted, which is exactly what makes the point-location walk below fast
-in practice (amortized $O(1)$ instead of $O(\sqrt n)$ per insertion).
+Skip the three points already used for bootstrapping. Consecutive
+insertions often lie near one another, which helps the point-location walk
+in practice; no constant-time guarantee is assumed.
 
 \begin{task}
-Implement a Hilbert-curve sort of the input points (map each point to a
-Hilbert index at a fixed recursion depth, then sort by that index).
+Implement an insertion permutation based on Hilbert keys at a fixed
+recursion depth. Keep point identifiers and the associated physical fields
+unchanged. Compare the walking cost with an unsorted insertion order.
 \end{task}
 
 \subsection*{1.4 --- Locating the point: a stochastic visibility walk}
@@ -265,7 +282,11 @@ contains it, starting the walk from the triangle in which the
 \begin{lstlisting}[style=code,caption={Stochastic visibility walk},captionpos=b]
 T <- last triangle used
 loop:
-  let (u,v,w) be the vertices of T, CCW
+  if T is a ghost triangle (a,b,infinity):
+      if orient2d(a,b,p) > 0: T0 <- T; stop
+      T <- finite neighbour across (a,b)
+      continue the loop
+  let (u,v,w) be the vertices of finite T, CCW
   test the 3 edges (u,v),(v,w),(w,u) of T in a *random* order
   for the first edge (a,b) such that orient2d(a,b,p) < 0:
       cross into the triangle across (a,b);  T <- that triangle
@@ -304,8 +325,9 @@ while Q is not empty:
        if T' not in cavity and incircle(T', p) > 0:
            cavity <- cavity + {T'}
            Q.push(T')
-       else:
-           boundary <- boundary + {e}
+# Extract the boundary only after the cavity is complete:
+boundary <- all half-edges in cavity whose twin is outside cavity
+order boundary by following its connected edge loop
 \end{lstlisting}
 
 At the end, \lstinline{boundary} is the ordered set of edges bounding the
@@ -326,13 +348,16 @@ must be updated \textbf{locally}:
     $p\!\to\!a$) to their counterparts in the two adjacent new fan triangles.
 \end{itemize}
 
-No other half-edge in the mesh needs to be touched.
+Update the surviving neighbours' twin references to point to the new
+half-edges. No other half-edge needs to be touched. If a new triangle
+contains $q_\infty$, cyclically rotate its vertices to keep that vertex last.
 
 \begin{task}\label{tsk:bowyerwatson}
-Implement the full incremental Bowyer--Watson loop: super-triangle,
-Hilbert-sorted insertion, visibility walk, cavity, retriangulation. When
-every point of $S$ has been inserted, discard every triangle that still
-touches one of $q_0,q_1,q_2$: what remains is exactly $DT(S)$.
+Implement the full incremental Bowyer--Watson loop: one-point-at-infinity
+bootstrap, index-based Hilbert insertion, visibility walk, cavity and
+retriangulation. Once all input points have been inserted, discard the
+ghost triangles and set exposed twin references to $-1$. The remaining
+finite mesh is $DT(S)$.
 \end{task}
 
 \subsection*{1.7 --- Filtering into an alpha shape}
@@ -354,29 +379,34 @@ shape for a reasonable range of $\alpha$, and degenerates back towards the
 convex hull as $\alpha\to\infty$.
 \end{task}
 
-\paragraph{A single global $\alpha$ is not always enough.} If $S$ has a
-strongly non-uniform density --- a dense cluster next to a sparse one --- no
-single constant $\alpha$ works everywhere: small enough to avoid bridging
-the sparse region, it eats away real detail in the dense one; large enough
-to preserve the dense region, it bridges the sparse one anyway. The fix is
-to let $\alpha$ become a \textbf{size map} $\alpha(x,y)$, a scalar field over
-the plane, and to filter each triangle against $\alpha$ evaluated at its own
-circumcenter (or centroid) rather than against one fixed number.
+\paragraph{A single global $\alpha$ is not always enough.} A value large
+enough to retain a sparsely sampled region may bridge gaps in a densely
+sampled region; a smaller value can remove valid triangles in the sparse
+region. Assign a local size $\alpha_i>0$ to each node, and derive a threshold
+for each triangle $T=(i,j,k)$ from its \emph{nodal} values:
+\[
+ \alpha_T^{\mathrm{avg}}=\frac{\alpha_i+\alpha_j+\alpha_k}{3},\qquad
+ \alpha_T^{\min}=\min(\alpha_i,\alpha_j,\alpha_k),\qquad
+ \alpha_T^{\max}=\max(\alpha_i,\alpha_j,\alpha_k).
+\]
+Retain $T$ when its circumradius is at most the chosen $\alpha_T$.
+This spatially varying filter generalizes the constant-radius construction.
+Do not sample the size field at the circumcenter: that requires an extra
+query and can be misleading, for example when many triangles have the same
+circumcenter despite different local sampling densities.
 
 \begin{task}
-Generalize your filter to accept $\alpha$ as a function $\alpha(x,y)$
-instead of a constant (a simple analytic function, e.g.\ depending on
-distance to a reference point, is enough --- you do not need a full mesh
-size-field data structure for this homework). Test on a point cloud whose
-density genuinely varies across the domain, and show that a well-chosen
-$\alpha(x,y)$ recovers the shape correctly where a single constant $\alpha$
-cannot.
+Compare the average, minimum and maximum nodal thresholds on a point cloud
+with non-uniform density. Discuss which triangles each choice retains and
+how it affects holes and thin features. Start from an analytic nodal size
+field; other aggregation rules may also be investigated and justified.
 \end{task}
 
 \begin{note}
 Export your triangulation to Gmsh's \texttt{.pos} format (or any format you
 can visualize) at every stage --- after Bowyer--Watson and after alpha
-filtering --- so you can \emph{see} bugs instead of guessing at them.
+filtering. Kerem's OpenGL renderer is another option, including for
+interactive inspection, when made available --- so you can \emph{see} bugs instead of guessing at them.
 \end{note}
 
 % ======================================================================
@@ -388,63 +418,64 @@ jagged, uneven boundary: a triangle can be thin and skinny yet still have a
 circumradius just under $\alpha$, so it survives the filter even though it
 poorly represents the local shape. \textbf{L.~Paul Chew's algorithm}
 (1989/1993) improves this by \emph{adding} well-chosen points to the
-triangulation rather than only removing triangles --- and it reuses, almost
-without modification, the point-insertion routine you already wrote in
-Part~1.
+triangulation rather than only removing triangles --- and it reuses the point-insertion machinery of Part~1, with
+additional care to preserve the extracted boundary.
 
 \subsection*{2.1 --- The idea}
 
-Call a triangle $T$ \textbf{bad} if its circumradius-to-shortest-edge ratio
-exceeds a quality bound $\rho$ (a typical choice is $\rho\approx 1$, which
-excludes triangles with an angle smaller than about $20^\circ$). Chew's
-algorithm repeatedly picks a bad triangle and inserts a new point,
-a \textbf{Steiner point}, at its \textbf{circumcenter}:
+Refine the domain \emph{after} extracting its alpha shape. Preserve its
+boundary segments and holes during insertion. A triangle $T$ is
+\textbf{bad} if its circumradius-to-shortest-edge ratio exceeds a chosen
+bound $\rho$, or if it exceeds the local target size. Since
+$R_T/\ell_{\min,T}=1/(2\sin\theta_{\min,T})$, a bound $\rho=1$ corresponds
+to a minimum angle of $30^\circ$ for triangles satisfying it.
 
-\needspace{11\baselineskip}
-\begin{lstlisting}[style=code,caption={Chew's refinement algorithm},captionpos=b]
+\begin{lstlisting}[style=code,caption={Boundary-preserving refinement},captionpos=b]
 repeat:
-    find a triangle T that is "bad"
-        (circumradius / shortest edge > rho,  OR  circumradius > alpha)
+    find a bad triangle T (quality or local size criterion)
     if none exists: stop
     c <- circumcenter(T)
-    insert c into the triangulation
-        (exactly the routine of Task 2: walk, cavity, retriangulate)
+    if c is admissible and encroaches on no protected segment:
+        insert c; update the local mesh and nodal size values
+    else:
+        split the relevant protected boundary segment
+        or record T as unresolved under your boundary policy
+    stop if the iteration or point-count limit is reached
 \end{lstlisting}
 
-Why the circumcenter? By definition it is equidistant from all three
-vertices of $T$ and lies at the centre of $T$'s (large, empty) circumcircle
---- inserting it there is the single point that most effectively breaks $T$
-and its immediate neighbours into smaller, better-shaped triangles, since
-after insertion no triangle incident to $c$ can have a circumcircle larger
-than the one that existed before (the new circumcircles are all contained
-in the old one).
+The circumcenter is the centre of an empty circle, which motivates its use
+as a candidate Steiner point. Reuse the insertion machinery of Part~1, but
+adapt it to respect the protected boundary: it must not create triangles
+across holes or outside the retained domain. Splitting a protected segment
+must preserve its geometry and update both connectivity and boundary data.
 
-\subsection*{2.2 --- Termination}
+\subsection*{2.2 --- Refinement order and stopping criteria}
 
-For a large enough quality bound ($\rho\gtrsim 1$, roughly a $20^\circ$
-minimum-angle guarantee) Chew's algorithm is known to terminate, inserting a
-number of Steiner points bounded in terms of the geometry of $S$. For this
-homework you do not need to reprove that bound --- but you should still
-protect your implementation with a maximum number of iterations, and you
-should expect (and check) that the number of bad triangles decreases
-monotonically as refinement proceeds.
+Use the sequence \textbf{triangulation $\to$ alpha-shape extraction $\to$
+mesh refinement}. A second alpha-shape extraction is not required: the
+refinement step is intended to improve the mesh of the already selected
+domain. Refining the whole convex-hull triangulation \emph{before}
+filtering can populate holes with Steiner points and change the shape
+subsequently detected by the filter.
 
 \begin{note}
-A circumcenter can fall \emph{outside} the current alpha shape (e.g.\ across
-a concavity). A simple, adequate policy for this homework: only insert
-circumcenters that fall inside the current alpha shape; a bad triangle whose
-circumcenter would fall outside is instead handled by splitting its longest
-boundary edge at its midpoint. You are free to justify and implement a
-different policy, as long as you state it clearly.
+Preserving the domain during refinement does not prove that filtering the
+new triangulation would return the same alpha shape, especially with
+spatially varying nodal thresholds. Explain the assumptions needed for
+such a claim. Likewise, termination guarantees for established refinement
+algorithms depend on their boundary rules and geometric assumptions;
+they do not automatically apply to every simplified implementation.
 \end{note}
 
 \begin{task}\label{tsk:chew}
-Implement Chew's refinement loop on top of your Part~1 code. After
-refinement has converged, \textbf{re-apply the alpha-shape filter} of
-Section~1.7: the new, smaller triangles created around every inserted
-point may now individually satisfy the $\alpha$ bound even where the
-original coarse triangles did not, giving a tighter, better-quality
-approximation of the point cloud's shape.
+Implement a Chew-inspired refinement loop on the extracted alpha shape,
+with an explicit policy for circumcenters outside the domain and for
+encroached boundary segments. Explain how holes are preserved. Set iteration
+and point-count limits, report unresolved bad triangles and track quality
+throughout refinement; the number of bad triangles need not decrease
+monotonically. Explain why refinement before filtering can change the
+reconstructed domain. Do not re-apply the alpha filter as a routine second
+step.
 \end{task}
 
 \begin{task}
@@ -455,113 +486,175 @@ each case.
 \end{task}
 
 % ======================================================================
-\homeworkpart{3}{PFEM: A Particle Finite Element Method for Free-Surface Flows}
+\homeworkpart{3}{Spatial Search Structures and PFEM Integration}
 % ======================================================================
 
-The \textbf{Particle Finite Element Method} (PFEM) simulates a fluid as a
-cloud of Lagrangian particles (the mesh vertices) that \emph{move} with the
-flow. At every time step, the fluid domain itself changes shape --- this is
-exactly a free surface --- and it must be re-detected from the current
-particle positions before the next physics step can be computed. This is
-precisely the job of the alpha shape you built in Part~1.
+Implement a spatial search structure, such as a \textbf{quadtree}, on the
+fixed solid boundary segments. These segments are stored independently of
+the fluid particles and mesh. Finally, use the structure in a
+\textbf{Particle Finite Element Method} (PFEM) loop: the fluid particles
+move with the velocity field, and Parts~1 and~2 rebuild their domain and
+refine its mesh at each step.
 
-\subsection*{3.1 --- The provided solver}
+\subsection*{3.1 --- Nearest-edge queries and collision detection}
 
-The Navier--Stokes finite element time step itself is not something you
-need to write: it will be provided by \textbf{MigFlow}, wrapped in a small
-API for this homework. From your side, this API amounts to a single
-function that performs one time step on a given triangulation. Its
-interface will look essentially like this:
+Your structure must support two queries:
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Nearest solid edge to a point.} Return the nearest segment,
+    the closest point on it and the distance. Use this to distinguish wall
+    contact from the free surface, with a documented distance tolerance.
+  \item \textbf{First intersection with a displacement segment.} Given a
+    particle's current and proposed positions, return the first solid edge
+    hit and its parameter along the displacement. Shorten the displacement
+    to keep the particle on the admissible side of the wall.
+\end{itemize}
+Store or reference every segment in all cells it intersects, or use a
+bounding-box hierarchy with a documented storage rule. Prune nearest-edge
+queries using distance lower bounds; checking only the point's own cell is
+not sufficient. For collision queries, search all cells crossed by the
+motion and select the earliest valid hit. Treat endpoint contacts,
+collinear motions and particles already on a wall consistently.
 
-\needspace{20\baselineskip}
-\begin{lstlisting}[style=code,caption={Interface of the provided solver (prototype)},captionpos=b]
-// nv, nt              : number of vertices / triangles
-// coord[2*nv]          : nodal coordinates (x0,y0,x1,y1,...)
-// triangles[3*nt]      : vertex indices of each triangle (flat, CCW)
-// nWall, wallEdges[2*nWall]   : edges (vertex pairs) lying on rigid walls
-// nFree, freeEdges[2*nFree]   : edges (vertex pairs) lying on the free surface
-// vx[nv], vy[nv], p[nv]       : nodal velocities & pressure, time t (in),
-//                               updated in place to time t+dt (out)
-// dt                   : time step
-void pfemStep(int nv, int nt,
-              const double *coord, const int *triangles,
-              int nWall, const int *wallEdges,
-              int nFree,  const int *freeEdges,
-              double *vx, double *vy, double *p,
-              double dt);
+\begin{task}
+Implement both queries and validate them against an exhaustive scan of all
+solid edges. Measure query cost as the number of edges and particles grows.
+Document your subdivision rule, contact tolerance and collision policy.
+\end{task}
+
+\subsection*{3.2 --- The provided solver and the PFEM loop}
+
+The fluid solver is provided; you do not need to implement its finite
+element formulation. The following C interface is a \textbf{provisional
+contract}, to be confirmed with the supplied implementation. Python users
+will need the corresponding binding or wrapper.
+
+\begin{lstlisting}[style=code,language=C,caption={Provisional solver interface},captionpos=b]
+#include <stdint.h>
+typedef enum {
+    BULK = 0, FREE_SURFACE = 1, WALL = 2
+} node_type_et;
+
+typedef struct {
+    int success;
+} solver_status_st;
+
+typedef struct {
+    double density;       // rho
+    double viscosity;     // nu; convention to be confirmed
+    double gravity[2];
+    double dt;
+} physical_props_st;
+
+solver_status_st solve_navier_stokes(
+    double const *nodes, uint32_t nnodes,
+    uint32_t const *elems, uint32_t nelems,
+    node_type_et const *node_type,
+    uint32_t const *bnd_edges, uint32_t n_bnd_edges,
+    physical_props_st const *props, double *uvp);
 \end{lstlisting}
 
-You do not need to know --- or reimplement --- anything about the fluid
-solver itself. Your job is the loop \emph{around} it.
+Coordinates are interleaved $(x_0,y_0,x_1,y_1,\ldots)$, with length
+$2n_{\mathrm{nodes}}$; elements contain $3n_{\mathrm{elems}}$ vertex indices
+in CCW order. The array \texttt{node\_type} contains one classification per
+node. The array \texttt{bnd\_edges} contains $2n_{\mathrm{bnd\_edges}}$
+indices describing the \emph{current fluid-mesh boundary}, not the independent
+solid-wall geometry. The caller allocates \texttt{uvp}, of length
+$3n_{\mathrm{nodes}}$. It stores the interleaved input/output values
+\[
+  (u_0,v_0,p_0,u_1,v_1,p_1,\ldots).
+\] Check the returned solver status before moving particles.
 
-\subsection*{3.2 --- The PFEM time-stepping loop}
+In this provisional contract, bulk nodes have velocity and pressure degrees
+of freedom; free-surface nodes use the prescribed pressure $p=0$; wall
+nodes impose no slip, $u=v=0$. The solver handles pressure consistently
+with its formulation; a wall classification does not prescribe $p=0$.
 
-\needspace{20\baselineskip}
+\needspace{30\baselineskip}
 \begin{lstlisting}[style=code,caption={PFEM driver},captionpos=b]
-build the initial mesh of the fluid domain      (Part 1 + Part 2)
-classify its boundary edges into wallEdges (fixed, given a priori)
-                            and freeEdges (the rest of the alpha-shape boundary)
-vx, vy, p <- initial conditions
+read/construct the fixed solid boundary segments
+build their quadtree once
+initialize fluid positions, nodal sizes and (u,v,p)
 
 for each time step:
-    pfemStep(nv, nt, coord, triangles,
-             nWall, wallEdges, nFree, freeEdges,
-             vx, vy, p, dt)                      # provided solver
+    triangulate the fluid points; extract the alpha shape
+    refine the retained domain, preserving its boundaries
+    transfer fields and sizes to any new nodes
+    bnd_edges <- fluid-mesh edges with no opposite
+    node_type <- BULK for every node
+    for each node belonging to bnd_edges:
+        query nearest solid edge
+        classify as WALL if within contact tolerance
+        otherwise classify as FREE_SURFACE
+    choose dt using the mesh size and velocity
+    status <- solve_navier_stokes(...)
+    if not status.success: stop and report the failure
 
-    for each vertex i:                           # move the particles
-        coord[i] <- coord[i] + dt * (vx[i], vy[i])
-
-    re-triangulate coord from scratch             # Part 1
-    recompute the alpha shape                     # Part 1 + Part 2
-    re-classify boundary edges into wallEdges / freeEdges
-
+    for each fluid node i:
+        displacement <- dt * (u[i],v[i])
+        query first wall hit along this displacement
+        shorten displacement if needed to prevent crossing
+        coord[i] <- coord[i] + displacement
     save/plot the current state
 \end{lstlisting}
 
 \subsection*{3.3 --- Practical points}
 
 \begin{itemize}[leftmargin=1.4em]
-  \item \textbf{Walls do not move.} Points that lie on a rigid wall should
-    keep their prescribed position (or slide tangentially along the wall,
-    if you choose to support that) --- they must never be treated as free
-    and never be deleted or displaced off the wall by remeshing.
-  \item \textbf{Choosing $\alpha$.} A natural choice is a small multiple of
-    the local mesh spacing; too small an $\alpha$ will erroneously cut off
-    thin, physically valid necks of fluid (e.g.\ during a splash), too large
-    an $\alpha$ will fail to detect a fluid separation (e.g.\ a droplet
-    pinching off).
-  \item \textbf{Mesh quality.} As particles move, cluster, and spread out,
-    triangles degenerate. Re-running Chew's algorithm (Part~2) after every
-    remeshing step keeps triangle quality under control; you may also
-    choose to remove points that have become too close to a neighbour.
-  \item \textbf{Time step.} You are not required to derive a rigorous CFL
-    condition, but you should pick $dt$ small enough that particles move by
-    a small fraction of the local mesh size in a single step, and say so in
-    your report.
+  \item \textbf{Independent walls.} Solid boundary segments do not move,
+    are not fluid elements and need not be triangulated. They provide the
+    geometry for contact and crossing queries. Fluid nodes in contact are
+    classified separately and receive the solver's wall condition.
+  \item \textbf{Mesh-size field.} Start with a constant target spacing
+    $h_i$ and take $\alpha_i=c h_i$ with a documented factor $c>0$.
+    As an extension, try a bounded size field based on distance to the free
+    surface, the velocity gradient or vorticity. Explain the physical or
+    geometric features targeted by your choice.
+  \item \textbf{Field transfer.} Interpolate velocity, pressure and nodal
+    size values to Steiner points. If you remove points, update all
+    associated fields and indices consistently. Document this transfer;
+    it is essential to keep remeshing and the solver compatible.
+  \item \textbf{Time step.} For this homework, use the displacement-based
+    CFL guideline
+    \[
+      U_{\max}\frac{\Delta t}{h_{\min}}\leq\beta,
+      \qquad 0<\beta<1,
+    \]
+    where $U_{\max}=\max_i\sqrt{u_i^2+v_i^2}$ and $h_{\min}$ is the minimum
+    triangle altitude of the current mesh. State your choice of $\beta$
+    and impose a maximum time step when $U_{\max}=0$. This geometric
+    guideline does not replace other restrictions of the provided solver;
+    collision queries are still required after the velocity update.
 \end{itemize}
 
 \begin{task}
-Implement the PFEM driver loop above around the provided \lstinline{pfemStep}
-function, reusing your Part~1/Part~2 code for the remeshing step.
+Assemble the driver around \lstinline{solve_navier_stokes}, reusing
+Parts~1 and~2 and your spatial search structure. Document field transfer,
+node classification and handling of wall collisions.
 \end{task}
 
 \begin{task}
-Demonstrate your implementation on a classic \textbf{dam-break} test case
-(a rectangular column of fluid, initially at rest, collapsing under gravity
-in a rigid tank): provide a short sequence of snapshots (or a short video)
-showing the evolving mesh and free surface.
+Demonstrate the implementation on a \textbf{dam-break} test: a rectangular
+column of fluid, initially at rest, collapses under gravity in a rigid
+tank. Provide snapshots or a short video of the evolving mesh and free
+surface, and check that particles do not cross the solid walls.
 \end{task}
+
+
 
 % ======================================================================
 \section*{Practical Information}
 % ======================================================================
 
 \begin{itemize}[leftmargin=1.4em]
-  \item \textbf{Language.} Your code must be written in \textbf{C or C++}
-    (required, in particular, to link directly against the provided
-    \lstinline{pfemStep} binary/object file for Part~3).
+  \item \textbf{Language.} You may use \textbf{C, C++ or Python}.
+    The repo contains a skeleton of the project in C because Nathan thinks
+    you should do it in C. But he knows C can be scary so he's included a
+    tutorial on how to call C functions from Python in
+    \path{docs/python-binding-example/}. This way you can use Python for
+    the high-level logic and still implement the performance-critical
+    parts in C !
   \item \textbf{Predicates and sorting.} Using an existing, well-tested
-    implementation of \lstinline{orient2d}/\lstinline{incircle} (e.g.\
+    implementation of \lstinline{orient2d} and \lstinline{incircle} (e.g.\
     Shewchuk's robust predicates) is clearly \textbf{allowed} --- Part~1 is
     about the triangulation algorithm and its data structure, not about
     re-deriving exact arithmetic. Likewise for the Hilbert sort: you may use
@@ -569,17 +662,27 @@ showing the evolving mesh and free surface.
     \url{https://git.immc.ucl.ac.be/hextreme/HXTSort}.
   \item \textbf{Deliverables.} Your source code (buildable from a clean
     checkout, with a short \texttt{README}), together with a short report
-    (max.\ 6 pages) describing your data structures, any design choices left
+    (max.\ 4 pages) describing your data structures, any design choices left
     open in the statement, and the results asked for in Parts~1--3.
+    Four pages is a maximum, not a target: focus on your design choices,
+    tests and results rather than repeating the lectures or this statement.
   \item \textbf{Visualization.} Choice of weapons: there are plenty of
     reasonable options, and you are free to pick whichever suits you. Both
     \textbf{ParaView} and \textbf{Gmsh} are well suited to this kind of
     work --- e.g.\ export your triangulations in Gmsh's \texttt{.pos} format
     so that you can inspect your own results at every stage of development.
-  \item \textbf{Deadline.} \emph{[to be announced on Moodle]}.
-  \item \textbf{Academic integrity.} This is individual work. You may
-    discuss ideas with classmates, but the code and the report you submit
-    must be your own.
+    Kerem's OpenGL renderer is also an option for visualization and
+    interactivity when made available.
+  \item \textbf{Deadline.} \emph{[to be announced on \href{https://perso.uclouvain.be/vincent.legat/zouLab/meca2170.php}{zouLab web site}]}.
+  \item \textbf{Academic integrity.} Work in \textbf{groups of two}. You may
+    discuss ideas with classmates, but the submitted code and report must
+    reflect your group's work and understanding.
+  \item \textbf{Use of AI.} You may use AI to help you understand and
+    implement the tasks. Both members must understand the submitted code
+    and be able to explain its design and limitations. A solution you
+    understand, even with flaws you can explain, is preferable to a
+    functioning program you cannot explain. The purpose of this project
+    is to learn the course material.
 \end{itemize}
 
 \end{document}

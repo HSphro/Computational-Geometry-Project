@@ -51,9 +51,8 @@ void meshReserveTriangles(Mesh* mesh, int n)
 
     int cap = grow(mesh->allocTriangles, n);
 
-    mesh->origin    = xrealloc(mesh->origin,    3 * (size_t)cap * sizeof(int));
-    mesh->next      = xrealloc(mesh->next,      3 * (size_t)cap * sizeof(int));
-    mesh->twin      = xrealloc(mesh->twin,      3 * (size_t)cap * sizeof(int));
+    mesh->triangles = xrealloc(mesh->triangles, 3 * (size_t)cap * sizeof(int));
+    mesh->twin     = xrealloc(mesh->twin,      3 * (size_t)cap * sizeof(int));
 
     mesh->allocTriangles = cap;
 }
@@ -72,8 +71,7 @@ Mesh* allocateMesh(int nNodes)
     mesh->nodeType = NULL;
     mesh->nodeVel = NULL;
     mesh->sizefield = NULL;
-    mesh->origin = NULL;
-    mesh->next = NULL;
+    mesh->triangles = NULL;
     mesh->twin = NULL;
 
     if (nNodes < 1) nNodes = 1;
@@ -94,8 +92,7 @@ void freeMesh(Mesh* mesh)
     free(mesh->nodeType);
     free(mesh->nodeVel);
     free(mesh->sizefield);
-    free(mesh->origin);
-    free(mesh->next);
+    free(mesh->triangles);
     free(mesh->twin);
     free(mesh);
 }
@@ -130,18 +127,17 @@ int meshAddTriangle(Mesh* mesh)
     int h = 3 * t;
 
     for (int i = 0; i < 3; i++) {
-        mesh->next[h + i]   = h + (i + 1) % 3;  // CCW cycle, never changes
-        mesh->origin[h + i] = -1;
-        mesh->twin[h + i]   = HE_BOUNDARY;
+        mesh->triangles[h + i] = -1;
+        mesh->twin[h + i]      = HE_BOUNDARY;
     }
     return t;
 }
 
 void meshSetTriangleNodes(Mesh* mesh, int t, int v0, int v1, int v2)
 {
-    mesh->origin[3*t + 0] = v0;
-    mesh->origin[3*t + 1] = v1;
-    mesh->origin[3*t + 2] = v2;
+    mesh->triangles[3*t + 0] = v0;
+    mesh->triangles[3*t + 1] = v1;
+    mesh->triangles[3*t + 2] = v2;
 }
 
 void meshSetTwins(Mesh* mesh, int he0, int he1)
@@ -152,13 +148,13 @@ void meshSetTwins(Mesh* mesh, int he0, int he1)
 
 void meshUpdateStartHE(Mesh* mesh, int he)
 {
-    int v = mesh->origin[he];
+    int v = mesh->triangles[he];
     if (v < 0) return;
 
     int cur = mesh->startHE[v];
 
     // Nothing usable stored yet, or what is stored no longer starts at v.
-    if (cur == HE_BOUNDARY || mesh->origin[cur] != v) {
+    if (cur == HE_BOUNDARY || mesh->triangles[cur] != v) {
         mesh->startHE[v] = he;
         return;
     }
@@ -207,8 +203,8 @@ static void meshBuildTwins(Mesh* mesh)
     EdgeKey* keys = xrealloc(NULL, (size_t)nHe * sizeof(EdgeKey));
 
     for (int h = 0; h < nHe; h++) {
-        int a = mesh->origin[h];
-        int b = mesh->origin[mesh->next[h]];
+        int a = mesh->triangles[h];
+        int b = mesh->triangles[heNext(h)];
 
         keys[h].v0 = (a < b) ? a : b;
         keys[h].v1 = (a < b) ? b : a;
@@ -304,15 +300,9 @@ int meshCheck(const Mesh* mesh)
 
     for (int h = 0; h < nHe; h++) {
 
-        int v = mesh->origin[h];
+        int v = mesh->triangles[h];
         if (v < 0 || v >= mesh->nNodes)
             HE_ERR("he %d has an invalid origin (%d)\n", h, v);
-
-        // next must cycle inside the triangle, in 3 steps
-        if (mesh->next[h] != 3*(h/3) + (h%3 + 1)%3)
-            HE_ERR("he %d leaves its triangle through next\n", h);
-        if (mesh->next[mesh->next[mesh->next[h]]] != h)
-            HE_ERR("he %d is not on a 3-cycle\n", h);
 
         int tw = mesh->twin[h];
         if (tw == HE_BOUNDARY) continue;
@@ -326,8 +316,8 @@ int meshCheck(const Mesh* mesh)
             HE_ERR("he %d is its own twin\n", h);
 
         // twins walk the same edge, backwards
-        if (mesh->origin[tw] != mesh->origin[mesh->next[h]] ||
-            mesh->origin[mesh->next[tw]] != mesh->origin[h])
+        if (mesh->triangles[tw] != mesh->triangles[heNext(h)] ||
+            mesh->triangles[heNext(tw)] != mesh->triangles[h])
             HE_ERR("he %d and its twin %d do not share the same edge\n", h, tw);
     }
 
@@ -336,9 +326,9 @@ int meshCheck(const Mesh* mesh)
         if (h == HE_BOUNDARY) continue;         // isolated node, allowed
         if (h < 0 || h >= nHe)
             { HE_ERR("node %d has an invalid startHE (%d)\n", v, h); continue; }
-        if (mesh->origin[h] != v)
+        if (mesh->triangles[h] != v)
             HE_ERR("startHE[%d]=%d but that he starts at node %d\n",
-                   v, h, mesh->origin[h]);
+                   v, h, mesh->triangles[h]);
     }
 
     #undef HE_ERR

@@ -6,9 +6,8 @@
 
 /*
  * The three operations never move a half-edge from one triangle to another:
- * they only rewrite origin[] and twin[]. The invariant "triangle t owns the
- * half-edges 3t, 3t+1, 3t+2" therefore holds for free, and next[] is never
- * touched.
+ * they only rewrite triangles[] and twin[]. The invariant "triangle t owns the
+ * half-edges 3t, 3t+1, 3t+2" therefore holds for free.
  *
  * All three keep startHE[] up to date for the nodes they disturb.
  */

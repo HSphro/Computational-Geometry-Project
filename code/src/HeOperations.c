@@ -55,13 +55,13 @@ int edgeSwap(Mesh* mesh, int he)
     int d = mesh->twin[a];
     if (d == HE_BOUNDARY) return -1;            // nothing on the other side
 
-    int b = mesh->next[a], c = mesh->next[b];
-    int e = mesh->next[d], f = mesh->next[e];
+    int b = heNext(a), c = heNext(b);
+    int e = heNext(d), f = heNext(e);
 
-    int v0 = mesh->origin[a];
-    int v1 = mesh->origin[b];
-    int v2 = mesh->origin[c];
-    int v3 = mesh->origin[f];
+    int v0 = mesh->triangles[a];
+    int v1 = mesh->triangles[b];
+    int v2 = mesh->triangles[c];
+    int v3 = mesh->triangles[f];
 
     // The swapped edge is v2->v3: it must cut the quad into two CCW triangles,
     // which is exactly the quad being convex.
@@ -73,8 +73,8 @@ int edgeSwap(Mesh* mesh, int he)
     int te = mesh->twin[e], tf = mesh->twin[f];
 
     // triangle of a becomes (v2,v0,v3), triangle of d becomes (v2,v3,v1)
-    mesh->origin[a] = v2;  mesh->origin[b] = v0;  mesh->origin[c] = v3;
-    mesh->origin[d] = v2;  mesh->origin[e] = v3;  mesh->origin[f] = v1;
+    mesh->triangles[a] = v2;  mesh->triangles[b] = v0;  mesh->triangles[c] = v3;
+    mesh->triangles[d] = v2;  mesh->triangles[e] = v3;  mesh->triangles[f] = v1;
 
     meshSetTwins(mesh, a, tc);                  // a is v2->v0, c used to be
     meshSetTwins(mesh, b, te);                  // b is v0->v3, e used to be
@@ -113,17 +113,17 @@ int edgeSplit(Mesh* mesh, int he, double x, double y)
     if (he < 0 || he >= 3 * mesh->nTriangles) return -1;
 
     int a = he;
-    int b = mesh->next[a], c = mesh->next[b];
+    int b = heNext(a), c = heNext(b);
     int d = mesh->twin[a];                      // -1 on the boundary
 
-    int v1 = mesh->origin[b];               // origin[a] stays v0, it never moves
-    int v2 = mesh->origin[c];
+    int v1 = mesh->triangles[b];            // triangles[a] stays v0, it never moves
+    int v2 = mesh->triangles[c];
     int tb = mesh->twin[b];
 
     int n = meshAddNode(mesh, x, y);
 
     /* ---- side of `a` : T1 keeps (v0,n,v2), T3 takes (n,v1,v2) ---- */
-    mesh->origin[b] = n;                        // a: v0->n, b: n->v2, c: v2->v0
+    mesh->triangles[b] = n;                     // a: v0->n, b: n->v2, c: v2->v0
 
     int t3 = meshAddTriangle(mesh);
     int g = 3*t3, h = g + 1, i = g + 2;
@@ -142,11 +142,11 @@ int edgeSplit(Mesh* mesh, int he, double x, double y)
     }
 
     /* ---- side of `d` : T2 keeps (n,v0,v3), T4 takes (v1,n,v3) ---- */
-    int e = mesh->next[d], f = mesh->next[e];
-    int v3 = mesh->origin[f];
+    int e = heNext(d), f = heNext(e);
+    int v3 = mesh->triangles[f];
     int tf = mesh->twin[f];
 
-    mesh->origin[d] = n;                        // d: n->v0, e: v0->v3, f: v3->n
+    mesh->triangles[d] = n;                     // d: n->v0, e: v0->v3, f: v3->n
 
     int t4 = meshAddTriangle(mesh);
     int j = 3*t4, k = j + 1, l = j + 2;
@@ -184,15 +184,15 @@ int faceSplit(Mesh* mesh, int tri, double x, double y)
 
     int a = 3*tri, b = a + 1, c = a + 2;        // the triangle owns 3t,3t+1,3t+2
 
-    int v0 = mesh->origin[a];
-    int v1 = mesh->origin[b];
-    int v2 = mesh->origin[c];
+    int v0 = mesh->triangles[a];
+    int v1 = mesh->triangles[b];
+    int v2 = mesh->triangles[c];
     int tb = mesh->twin[b];                     // twin[a] never changes
     int tc = mesh->twin[c];
 
     int n = meshAddNode(mesh, x, y);
 
-    mesh->origin[c] = n;                        // T becomes (v0,v1,n)
+    mesh->triangles[c] = n;                     // T becomes (v0,v1,n)
 
     int t2 = meshAddTriangle(mesh);
     int d = 3*t2, e = d + 1, f = d + 2;

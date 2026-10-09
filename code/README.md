@@ -68,18 +68,20 @@ Some platform specific guidelines:
 Once you have everything, run the following commands to compile the code:
 
 ```sh
-mkdir build && cd build
-cmake .. 
+mkdir build
+cd build
+cmake ..
+cmake --build .
 ```
 
 If everything works as intended, you should end up with the following executables: 
 
 ```text
-exec/0_example_viewer             # Small demo of the built-in viewer
-exec/1_triangulation              # Helps you see/debug your triangulation
-exec/2_ashape_adaptation          # Helps you see/debug your triangulation-alpha shape-adaptation
-exec/3_1_distance_queries         # Helps you see/debug your distance queries
-exec/3_2_intersection_queries     # Helps you see/debug your intersection queries
+build/exec/0_example_viewer             # Small demo of the built-in viewer
+build/exec/1_triangulation              # Helps you see/debug your triangulation
+build/exec/2_ashape_adaptation          # Helps you see/debug your triangulation-alpha shape-adaptation
+build/exec/3_1_distance_queries         # Helps you see/debug your distance queries
+build/exec/3_2_intersection_queries     # Helps you see/debug your intersection queries
 ```
 
 If you don't see those files, ask your best friend for help! Else you can run 

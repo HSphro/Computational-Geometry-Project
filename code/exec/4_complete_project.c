@@ -118,6 +118,7 @@ int main(int argc, char ** argv) {
         .density = 1000.0,
         .viscosity = 1e-3,
         .gravity = {0.0, -9.81},
+        .sigma = 0.072,
         .dt = dt
     };
 

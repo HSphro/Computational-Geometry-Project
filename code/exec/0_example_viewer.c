@@ -27,9 +27,7 @@ static void printMesh(const Mesh *mesh, const char *title)
   const double *xy = getNodes(mesh, &nNodes);
   const int *tri = getTriangles(mesh, &nTriangles);
   const int *start = getStartHE(mesh, NULL);
-  const int *origin = getHeOrigin(mesh, &nHe);
-  const int *next = getHeNext(mesh, NULL);
-  const int *twin = getHeTwin(mesh, NULL);
+  const int *twin = getHeTwin(mesh, &nHe);
 
   printf("\n===== %s =====\n", title);
   printf("  %d nodes (room for %d), %d triangles (room for %d)\n",
@@ -63,9 +61,9 @@ static void printMesh(const Mesh *mesh, const char *title)
     printf("  %3d  %3d  %6d -> %4d  %5d  %5d",
            h,
            h / 3,
-           origin[h],
-           origin[next[h]],
-           next[h],
+           tri[h],
+           tri[heNext(h)],
+           heNext(h),
            twin[h]);
     if (twin[h] == HE_BOUNDARY)
       printf("   (boundary)");
@@ -79,8 +77,8 @@ static void printMesh(const Mesh *mesh, const char *title)
 // EXAMPLE : computes the mid point of an edge.
 static void edgeMidpoint(const Mesh *mesh, int he, double *x, double *y)
 {
-  int node1 = mesh->origin[he];
-  int node2 = mesh->origin[mesh->next[he]];
+  int node1 = mesh->triangles[he];
+  int node2 = mesh->triangles[heNext(he)];
   *x = 0.5 * (mesh->coords[2 * node1] + mesh->coords[2 * node2]);
   *y = 0.5 * (mesh->coords[2 * node1 + 1] + mesh->coords[2 * node2 + 1]);
 }
@@ -286,9 +284,8 @@ static void demoDisplayEdges(void)
   Mesh *mesh = buildDemoMesh(0);
   int nNodes, nHe;
   const double *xy = getNodes(mesh, &nNodes);
-  const int *origin = getHeOrigin(mesh, &nHe);
-  const int *next = getHeNext(mesh, NULL);
-  const int *twin = getHeTwin(mesh, NULL);
+  const int *tri = getTriangles(mesh, NULL);
+  const int *twin = getHeTwin(mesh, &nHe);
 
   /* the boundary of the mesh: every half-edge without a twin */
   uint32_t *edges = malloc(2 * (size_t)nHe * sizeof(uint32_t));
@@ -296,8 +293,8 @@ static void demoDisplayEdges(void)
   for (int h = 0; h < nHe; h++)
     if (twin[h] == HE_BOUNDARY)
     {
-      edges[2 * nEdges] = (uint32_t)origin[h];
-      edges[2 * nEdges + 1] = (uint32_t)origin[next[h]];
+      edges[2 * nEdges] = (uint32_t)tri[h];
+      edges[2 * nEdges + 1] = (uint32_t)tri[heNext(h)];
       nEdges++;
     }
 

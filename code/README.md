@@ -61,15 +61,24 @@ Some platform specific guidelines:
 - **Linux**: install `cmake`, `libglfw3-dev` and `libgl1-mesa-dev` on Debian/Ubuntu.
 - **macOS**: install the Xcode command line tools (`xcode-select --install`)
   and CMake (`brew install cmake glfw`).
-- **Windows**: install Visual Studio with the "Desktop development with C++"
-  workload, which includes CMake. Run the commands below from the "Developer
-  PowerShell for VS".
+- **Windows**: work in **WSL2**, a Linux inside Windows (the fluid solver
+  needs PETSc, which does not build natively on Windows):
+  1. In a PowerShell run as administrator: `wsl --install`, reboot, and
+     create your Linux user when Ubuntu asks for it.
+  2. In the Ubuntu terminal:
+     `sudo apt update && sudo apt install build-essential cmake python3 curl pkg-config git libglfw3-dev libgl1-mesa-dev`
+  3. Clone the repository **inside Linux** (e.g. in `~/`), not in `/mnt/c/...`:
+     compiling on the Windows drive is very slow.
+  4. Follow the Linux instructions from there. On Windows 11 (or Windows 10
+     with WSL from the Microsoft Store), the viewer windows open on your
+     Windows desktop. VS Code with its "WSL" extension edits the code inside
+     WSL as if it were local.
 
 Once you have everything, run the following commands to compile the code:
 
 ```sh
 mkdir build && cd build
-cmake .. 
+cmake ..
 ```
 
 If everything works as intended, you should end up with the following executables: 
@@ -84,6 +93,31 @@ exec/3_2_intersection_queries     # Helps you see/debug your intersection querie
 
 If you don't see those files, ask your best friend for help! Else you can run 
 each of them to see what you can do with them.
+
+## The fluid solver and PETSc
+
+The fluid solver (`src/project_solver.c`, used in Part 3) is a compact version
+of the solver of [MigFlow](https://git.immc.ucl.ac.be/fluidparticles/migflow)
+(www.migflow.be, GNU LGPL v3). It solves its linear systems with
+[PETSc](https://petsc.org), which you install **once**, locally, inside this
+directory:
+
+```sh
+./install_petsc.sh    # ~2 to 15 minutes, needs a C compiler, make, python3 and curl
+cd build
+cmake ..              # should now print "PETSc found: the fluid solver is enabled"
+```
+
+The script builds PETSc in `./external/petsc` and installs nothing anywhere
+else: to remove it, delete `./external`. Until PETSc is installed, CMake prints
+a warning but everything else builds; only the fluid solver refuses to run.
+(If you already have a PETSc of your own, `export PETSC_DIR=...` before
+calling cmake, it is used instead.)
+
+The linear solver can be changed without recompiling, through PETSc options
+with the prefix `fluid_`, e.g.
+`PETSC_OPTIONS="-fluid_ksp_type gmres -fluid_pc_type ilu -fluid_ksp_monitor" ./exec/4_complete_project`.
+The default, a direct sparse LU, is fine for the mesh sizes of this project.
 
 ## Adding files in CMake
 

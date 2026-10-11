@@ -29,6 +29,36 @@ if(NOT glfw3_FOUND)
     FetchContent_MakeAvailable(glfw)
 endif()
 
+# PETSc, only needed by the fluid solver. ./install_petsc.sh puts a local copy
+# in ./external/petsc, looked for first; $PETSC_DIR (and $PETSC_ARCH) next.
+list(PREPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/petsc)
+if(DEFINED ENV{PETSC_DIR})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{PETSC_DIR} $ENV{PETSC_DIR}/$ENV{PETSC_ARCH})
+endif()
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_search_module(PETSC QUIET IMPORTED_TARGET petsc PETSc)
+endif()
+add_library(petsc_lib INTERFACE)
+if(PETSC_FOUND)
+    target_link_libraries(petsc_lib INTERFACE PkgConfig::PETSC)
+else()
+    # No pkg-config (e.g. macOS without Homebrew's): look for the files directly
+    find_path(PETSC_INCLUDE_DIR petsc.h)
+    find_library(PETSC_LIBRARY petsc)
+    if(PETSC_INCLUDE_DIR AND PETSC_LIBRARY)
+        set(PETSC_FOUND TRUE)
+        target_include_directories(petsc_lib INTERFACE ${PETSC_INCLUDE_DIR})
+        target_link_libraries(petsc_lib INTERFACE ${PETSC_LIBRARY})
+    endif()
+endif()
+if(PETSC_FOUND)
+    message(STATUS "PETSc found: the fluid solver is enabled")
+else()
+    message(WARNING "PETSc not found: everything builds, but the fluid solver "
+                    "is disabled. Run ./install_petsc.sh, then cmake again.")
+endif()
+
 # =================== Define the exec/libs ==============================
 
 # ADD HERE ALL THE REQUIRED FILES YOU CREATE (1 per line)
@@ -65,6 +95,10 @@ endif()
 
 # Link libraries to the mesh executable
 target_link_libraries(geonum PUBLIC glfw OpenGL::GL)
+if(PETSC_FOUND)
+    target_link_libraries(geonum PUBLIC petsc_lib)
+    target_compile_definitions(geonum PUBLIC HAVE_PETSC)
+endif()
 if(UNIX)  # Linux and macOS, Windows has no separate math library
     target_link_libraries(geonum PUBLIC m)
 endif()
